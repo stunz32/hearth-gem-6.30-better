@@ -43,3 +43,16 @@ release-builds/
 
 # User data
 userData/
+
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+.idea
+.vscode
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 

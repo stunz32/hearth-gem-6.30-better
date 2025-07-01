@@ -1,22 +1,21 @@
-import chokidar from 'chokidar';
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
+import chokidar from 'chokidar';
 import logger from '../../utils/logger';
 
 /**
- * LogWatcher service for monitoring Hearthstone log files
- * Detects changes and emits events with parsed log data
+ * LogWatcher
+ * Monitors Hearthstone log files for game events
  * @module LogWatcher
  */
 export class LogWatcher extends EventEmitter {
   private watcher: chokidar.FSWatcher | null = null;
   private logDirectory: string;
   private logFiles: Map<string, number> = new Map();
+  private seenCardIds: Set<string> = new Set(); // Track unique card IDs within a draft
   
-  // Read the last N bytes of newly detected log files so we don't miss events that were
-  // written before the watcher started. 16 KB is large enough to capture at least the
-  // last few hundred log lines without incurring a noticeable performance cost.
+  // Constants
   private static readonly INITIAL_READ_BYTES = 16 * 1024; // 16 KB
   
   /**
@@ -218,8 +217,10 @@ export class LogWatcher extends EventEmitter {
         logger.info('Card chosen in draft', { cardId });
         this.emit('draftCardChosen', { cardId });
       }
-    } else if (line.includes('Draft.OnBegin')) {
+    } else if (line.includes('Draft.OnBegin') || line.includes('SetDraftMode - DRAFTING')) {
       logger.info('Draft session started');
+      // Reset seen card IDs when starting a new draft
+      this.seenCardIds.clear();
       this.emit('draftStarted');
     } else if (line.includes('Draft.OnComplete')) {
       logger.info('Draft session completed');
@@ -232,17 +233,20 @@ export class LogWatcher extends EventEmitter {
         logger.info('Hero card detected in draft', { heroId });
         this.emit('heroSelected', heroId);
       }
-    } else if (line.includes('SetDraftMode - DRAFTING')) {
-      // Detect active draft mode
-      logger.info('Draft mode active detected');
-      this.emit('draftStarted');
     } else if (line.includes('Draft deck contains card')) {
       // Parse cards in the draft deck
       const match = line.match(/Draft deck contains card (\w+)/);
       if (match && match[1]) {
         const cardId = match[1];
-        logger.info('Card detected in draft deck', { cardId });
-        this.emit('draftCardDetected', cardId);
+        
+        // Only emit if we haven't seen this card in this draft session
+        if (!this.seenCardIds.has(cardId)) {
+          logger.info('New card detected in draft deck', { cardId });
+          this.seenCardIds.add(cardId);
+          this.emit('draftCardDetected', cardId);
+        } else {
+          logger.debug('Duplicate card detected, skipping', { cardId });
+        }
       }
     }
   }

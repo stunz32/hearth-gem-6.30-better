@@ -1,9 +1,14 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow, screen } from 'electron';
 import logger from '../utils/logger';
 import LogWatcher from '../services/logReader/LogWatcher';
 import ArenaDraftDetector, { DraftState, CardData } from '../services/logReader/ArenaDraftDetector';
 import CardDataService, { Card } from '../services/cardData/CardDataService';
+import CardMatcher from '../services/cardData/CardMatcher';
 import OverlayManager from '../services/overlay/OverlayManager';
+import ScreenCaptureService from '../services/capture/ScreenCaptureService';
+import OCRService from '../services/ocr/OCRService';
+import VisualDraftDetector from '../services/logReader/VisualDraftDetector';
+import { RegionSelector } from '../services/config/RegionSelector';
 
 /**
  * HearthGemApp
@@ -12,12 +17,19 @@ import OverlayManager from '../services/overlay/OverlayManager';
  */
 export class HearthGemApp {
   private logWatcher: LogWatcher;
+  private screenCapture: ScreenCaptureService;
+  private ocrService: OCRService;
+  private cardMatcher: CardMatcher;
+  private visualDetector: VisualDraftDetector;
   private draftDetector: ArenaDraftDetector;
   private cardDataService: CardDataService;
   private overlayManager: OverlayManager;
   private currentPickNumber: number = 0;
   private totalPicks: number = 30; // Standard arena draft has 30 picks
   private detectedCards: Set<string> = new Set(); // Track unique card IDs
+  private useVisualDetection: boolean = true; // Enable visual detection by default
+  private regionSelector: RegionSelector;
+  private overlayWindow: BrowserWindow | null = null;
   
   /**
    * Creates a new HearthGemApp instance
@@ -27,9 +39,22 @@ export class HearthGemApp {
     
     // Initialize services
     this.logWatcher = new LogWatcher();
-    this.draftDetector = new ArenaDraftDetector(this.logWatcher);
+    this.screenCapture = new ScreenCaptureService();
+    this.ocrService = new OCRService();
+    this.cardMatcher = new CardMatcher();
+    this.visualDetector = new VisualDraftDetector(
+      this.screenCapture,
+      this.ocrService,
+      this.cardMatcher
+    );
+    this.draftDetector = new ArenaDraftDetector(
+      this.logWatcher,
+      this.visualDetector,
+      this.useVisualDetection
+    );
     this.cardDataService = new CardDataService();
     this.overlayManager = new OverlayManager();
+    this.regionSelector = new RegionSelector();
     
     // Set up event handlers
     this.setupEventHandlers();
@@ -47,6 +72,13 @@ export class HearthGemApp {
       await this.cardDataService.loadCardData();
       logger.info('Card data loaded successfully');
       
+      // Initialize card matcher with loaded cards
+      const allCards = Array.from(this.cardDataService.getAllCards());
+      this.cardMatcher.setCards(allCards);
+      
+      // Update draft detector with card data
+      this.draftDetector.setCardData(allCards);
+      
       // Create and show overlay
       this.overlayManager.createOverlay();
       this.overlayManager.positionOverHearthstone();
@@ -55,9 +87,9 @@ export class HearthGemApp {
       this.overlayManager.show();
       
       // Open DevTools in detached mode
-      const window = this.overlayManager.getOverlayWindow();
-      if (window) {
-        window.webContents.openDevTools({ mode: 'detach' });
+      this.overlayWindow = this.overlayManager.getOverlayWindow();
+      if (this.overlayWindow) {
+        this.overlayWindow.webContents.openDevTools({ mode: 'detach' });
       }
       
       // Get some sample cards to display
@@ -69,9 +101,9 @@ export class HearthGemApp {
         logger.warn('No sample cards available to display');
       }
       
-      // Start watching for log changes
-      await this.logWatcher.start();
-      logger.info('Log watcher started');
+      // Start watching for log changes and visual detection
+      await this.draftDetector.start();
+      logger.info('Draft detection started');
       
       // Show a welcome message
       this.updateLogStatus('📂 HearthGem Arena Assistant started', 'active');
@@ -89,20 +121,62 @@ export class HearthGemApp {
   /**
    * Stop the application
    */
-  public stop(): void {
+  public async stop(): Promise<void> {
     logger.info('Stopping HearthGem Arena Assistant');
     
-    // Stop services
-    this.draftDetector.stop();
-    this.overlayManager.destroy();
-    
-    logger.info('HearthGem Arena Assistant stopped');
+    try {
+      if (this.draftDetector) {
+        this.draftDetector.stop();
+      }
+
+      if (this.logWatcher) {
+        this.logWatcher.stop();
+      }
+
+      if (this.visualDetector) {
+        this.visualDetector.stop();
+      }
+
+      if (this.regionSelector) {
+        this.regionSelector.dispose();
+      }
+
+      this.ocrService.terminate().catch(error => {
+        logger.error('Error terminating OCR service', { error });
+      });
+      this.overlayManager.destroy();
+      
+      logger.info('HearthGem Arena Assistant stopped');
+    } catch (error) {
+      logger.error('Error stopping application', { error });
+    }
   }
   
   /**
-   * Set up event handlers for inter-service communication
-   * @private
+   * Test the visual detection with different settings
+   * @param options Test options
+   * @returns Promise resolving to test results
    */
+  public async testVisualDetection(options?: {
+    confidenceThreshold?: number;
+    preprocessingOptions?: Partial<import('../services/capture/ScreenCaptureService').PreprocessingOptions>;
+  }): Promise<any> {
+    logger.info('Testing visual detection', { options });
+    
+    try {
+      // Run test detection
+      const result = await this.visualDetector.testDetection(options);
+      
+      // Send results to UI
+      this.overlayManager.sendToRenderer('visual-detection-test-results', result);
+      
+      return result;
+    } catch (error) {
+      logger.error('Error testing visual detection', { error });
+      throw error;
+    }
+  }
+  
   private setupEventHandlers(): void {
     // Handle log directory found
     this.draftDetector.on('logDirectoryFound', (data) => {
@@ -280,13 +354,71 @@ export class HearthGemApp {
     
     // Handle IPC messages from renderer
     ipcMain.on('toggle-overlay', () => {
-      // Always show overlay when toggle is requested
-      // Instead of hiding, we'll just make it visible again
+      logger.info('Toggle overlay requested');
+      // Always show the overlay instead of toggling
       this.overlayManager.show();
+    });
+    
+    // Handle toggle visual detection
+    ipcMain.on('toggle-visual-detection', (_, enabled) => {
+      this.useVisualDetection = enabled;
+      this.draftDetector.setVisualDetection(enabled);
+      logger.info('Visual detection toggled', { enabled });
+      this.updateLogStatus(`🔍 Visual detection ${enabled ? 'enabled' : 'disabled'}`, 'active');
+    });
+    
+    // Handle test visual detection
+    ipcMain.on('test-visual-detection', async (_, options) => {
+      logger.info('Testing visual detection', { options });
+      this.updateLogStatus('🔍 Testing visual detection...', 'active');
       
-      // If it wasn't visible before, also reposition it
-      if (!this.overlayManager.isOverlayVisible()) {
-        this.overlayManager.positionOverHearthstone();
+      try {
+        // Use the new test method with options
+        const result = await this.testVisualDetection(options);
+        
+        if (result.success && result.cards && result.cards.length > 0) {
+          this.updateLogStatus(`✅ Matched ${result.cards.length} cards`, 'active');
+          
+          // Get full card data for matched cards
+          const matchedCards = result.cards.map((card: CardData) => 
+            this.cardDataService.getCard(card.id) || {
+              id: card.id,
+              name: 'Unknown Card',
+              cost: 0,
+              type: 'UNKNOWN',
+              rarity: 'COMMON',
+              set: 'UNKNOWN'
+            }
+          );
+          
+          // Display matched cards
+          this.overlayManager.displayCards(matchedCards);
+          
+          // Send detailed test results to renderer
+          this.overlayManager.sendToRenderer('visual-detection-test-results', result);
+        } else {
+          this.updateLogStatus('❌ No cards matched', 'error');
+          
+          // Send empty results to renderer
+          this.overlayManager.sendToRenderer('visual-detection-test-results', {
+            success: false,
+            cards: [],
+            timestamp: Date.now(),
+            error: 'No cards matched',
+            testResults: result.testResults
+          });
+        }
+      } catch (error) {
+        logger.error('Error testing visual detection', { error });
+        this.updateLogStatus(`❌ Visual detection error: ${error}`, 'error');
+        
+        // Send error to renderer
+        this.overlayManager.sendToRenderer('visual-detection-test-results', {
+          success: false,
+          cards: [],
+          timestamp: Date.now(),
+          error: `Test failed: ${error}`
+        });
       }
     });
     
@@ -307,6 +439,104 @@ export class HearthGemApp {
       // Display these cards in the overlay
       this.overlayManager.displayCards(sampleCards);
     });
+
+    // Region configuration handlers
+    ipcMain.handle('configure-regions', async () => {
+      try {
+        logger.info('Starting region configuration');
+        
+        // Minimize main overlay during region selection
+        if (this.overlayWindow) {
+          this.overlayWindow.minimize();
+        }
+        
+        const result = await this.regionSelector.selectRegions();
+        
+        if (!result.cancelled && result.regions.length === 3) {
+          // Save the regions to the screen capture service
+          await this.screenCapture.updateManualRegions(result.regions);
+          
+          // Notify the overlay of successful configuration
+          if (this.overlayWindow) {
+            this.overlayWindow.webContents.send('regions-configured', {
+              success: true,
+              regionCount: result.regions.length
+            });
+          }
+          
+          logger.info('Regions configured successfully', { regionCount: result.regions.length });
+          return { success: true, regionCount: result.regions.length };
+        } else {
+          logger.info('Region configuration cancelled or incomplete');
+          return { success: false, cancelled: result.cancelled };
+        }
+      } catch (error) {
+        logger.error('Error configuring regions', { error });
+        return { success: false, error: String(error) };
+      } finally {
+        // Restore main overlay
+        if (this.overlayWindow) {
+          this.overlayWindow.restore();
+          this.overlayWindow.focus();
+        }
+      }
+    });
+
+    // Check if regions are configured
+    ipcMain.handle('check-regions-configured', async () => {
+      try {
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const hasRegions = await this.screenCapture.hasValidManualRegions();
+        
+        return {
+          configured: hasRegions,
+          screenSize: primaryDisplay.size
+        };
+      } catch (error) {
+        logger.error('Error checking region configuration', { error });
+        return { configured: false };
+      }
+    });
+
+    // Clear manual regions
+    ipcMain.handle('clear-regions', async () => {
+      try {
+        await this.screenCapture.clearManualRegions();
+        
+        if (this.overlayWindow) {
+          this.overlayWindow.webContents.send('regions-cleared');
+        }
+        
+        logger.info('Manual regions cleared');
+        return { success: true };
+      } catch (error) {
+        logger.error('Error clearing regions', { error });
+        return { success: false, error: String(error) };
+      }
+    });
+
+    // Test region detection
+    ipcMain.handle('test-region-detection', async () => {
+      try {
+        logger.info('Testing region detection');
+        
+        // Trigger a visual detection test
+        if (this.visualDetector) {
+          const result = await this.visualDetector.testDetection();
+          
+          if (this.overlayWindow) {
+            this.overlayWindow.webContents.send('region-test-result', result);
+          }
+          
+          return { success: true, result };
+        } else {
+          return { success: false, error: 'Visual detector not available' };
+        }
+      } catch (error) {
+        logger.error('Error testing region detection', { error });
+        return { success: false, error: String(error) };
+      }
+    });
   }
   
   /**
@@ -316,8 +546,8 @@ export class HearthGemApp {
    * @private
    */
   private updateLogStatus(message: string, type: 'active' | 'warning' | 'error' | 'normal'): void {
-    if (this.overlayManager.getOverlayWindow()) {
-      this.overlayManager.getOverlayWindow()!.webContents.send('log-status', { message, type });
+    if (this.overlayWindow) {
+      this.overlayWindow.webContents.send('log-status', { message, type });
     }
   }
   
@@ -328,8 +558,8 @@ export class HearthGemApp {
    * @private
    */
   private updateDraftStatus(message: string, type: 'active' | 'warning' | 'error' | 'normal'): void {
-    if (this.overlayManager.getOverlayWindow()) {
-      this.overlayManager.getOverlayWindow()!.webContents.send('draft-status', { message, type });
+    if (this.overlayWindow) {
+      this.overlayWindow.webContents.send('draft-status', { message, type });
     }
   }
   
@@ -339,8 +569,8 @@ export class HearthGemApp {
    * @private
    */
   private sendHeroSelected(hero: Card): void {
-    if (this.overlayManager.getOverlayWindow()) {
-      this.overlayManager.getOverlayWindow()!.webContents.send('hero-selected', hero);
+    if (this.overlayWindow) {
+      this.overlayWindow.webContents.send('hero-selected', hero);
     }
   }
   
@@ -350,8 +580,8 @@ export class HearthGemApp {
    * @private
    */
   private sendDraftCardDetected(card: Card): void {
-    if (this.overlayManager.getOverlayWindow()) {
-      this.overlayManager.getOverlayWindow()!.webContents.send('draft-card-detected', card);
+    if (this.overlayWindow) {
+      this.overlayWindow.webContents.send('draft-card-detected', card);
     }
   }
   
@@ -362,8 +592,8 @@ export class HearthGemApp {
    * @private
    */
   private updateDraftInfo(pickNumber: number, totalPicks: number): void {
-    if (this.overlayManager.getOverlayWindow()) {
-      this.overlayManager.getOverlayWindow()!.webContents.send('draft-info', { 
+    if (this.overlayWindow) {
+      this.overlayWindow.webContents.send('draft-info', { 
         pickNumber, 
         totalPicks 
       });

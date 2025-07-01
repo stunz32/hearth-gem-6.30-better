@@ -1,0 +1,88 @@
+# HearthGem Arena Assistant - Visual Detection Feature PRD
+
+## Overview
+HearthGem Arena Assistant needs to implement visual detection capabilities to accurately identify and extract card names during Hearthstone Arena and Underground draft picks by analyzing the game screen. This feature will complement our existing log parsing system to ensure complete and accurate card detection.
+
+## Core Requirements
+
+### Integration with Existing Architecture
+- Must integrate seamlessly with our current Electron-based architecture
+- Should work alongside existing LogWatcher and ArenaDraftDetector
+- Must maintain the current performance standards and not impact existing functionality
+
+### Visual Detection System
+1. Screen Capture
+   - Implement screen capture functionality using Electron's desktopCapturer API
+   - Capture specific regions of the Hearthstone window where cards are displayed
+   - Support different window sizes and resolutions
+
+2. Image Processing
+   - Convert captured regions to processable image data
+   - Implement image preprocessing (grayscale, thresholding, noise reduction)
+   - Extract regions of interest (ROIs) for each card name
+
+3. OCR Integration
+   - Integrate Tesseract.js for OCR processing
+   - Train or configure OCR for Hearthstone's font (Belwe)
+   - Process card name regions to extract text
+
+4. Card Name Matching
+   - Implement fuzzy string matching for OCR output
+   - Match extracted names against our existing card database
+   - Handle multiple language support
+
+### Technical Requirements
+
+1. Performance
+   - Complete visual analysis within 100ms
+   - Minimize impact on application memory usage
+   - Efficient screen capture and processing
+
+2. Accuracy
+   - 95%+ accuracy in card name detection
+   - Robust error handling for mismatches
+   - Fallback to log parsing when available
+
+3. Integration Points
+   - Extend CardDataService to support visual detection results
+   - Update ArenaDraftDetector to combine log and visual data
+   - Enhance OverlayManager to display detection status
+
+## Implementation Phases
+
+### Phase 1: Core Screen Capture
+- Implement Electron desktopCapturer integration
+- Set up window detection and region capture
+- Basic image data extraction
+
+### Phase 2: Image Processing
+- Implement image preprocessing pipeline
+- ROI extraction
+- Image optimization for OCR
+
+### Phase 3: OCR Integration
+- Tesseract.js setup and configuration
+- Font training/optimization
+- Text extraction pipeline
+
+### Phase 4: Name Matching
+- Fuzzy matching implementation
+- Database integration
+- Multi-language support
+
+### Phase 5: Integration
+- Combine with existing log parsing
+- Update UI components
+- Error handling and fallbacks
+
+## Success Metrics
+- 95%+ accuracy in card detection
+- < 100ms processing time
+- Seamless integration with existing features
+- Positive user feedback on detection reliability
+
+## Dependencies
+- Electron's desktopCapturer API
+- Tesseract.js for OCR
+- Image processing libraries
+- Fuzzy string matching library 

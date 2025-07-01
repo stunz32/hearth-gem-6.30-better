@@ -28,10 +28,13 @@
   "dependencies": {
     "chokidar": "^3.5.3",
     "electron-log": "^4.4.8",
+    "string-similarity": "^4.0.4",
+    "tesseract.js": "^6.0.1",
     "winston": "^3.8.2"
   },
   "devDependencies": {
     "@types/node": "^18.15.11",
+    "@types/string-similarity": "^4.0.2",
     "@typescript-eslint/eslint-plugin": "^5.57.1",
     "@typescript-eslint/parser": "^5.57.1",
     "electron": "^24.1.2",

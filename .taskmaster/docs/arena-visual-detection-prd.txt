@@ -1,0 +1,53 @@
+Feature X – Real-Time Arena Choice Visual Detection
+================================================================
+
+1. Feature Goal
+---------------
+Accurately identify and extract the names (and ultimately CARD_IDs) of the 3-5 cards offered during Hearthstone Arena and Underground draft picks by analyzing the game screen in real time, compensating for the absence of card IDs in the log stream and ensuring the recommendation system receives complete, timely data.
+
+2. API Relationships
+--------------------
+• HearthGem.LogParser – Emits a "DraftChoicePresented" event with context.
+• HearthGem.App / HearthGem.ScreenReader – Captures and processes screen regions; emits detected CARD_IDs.
+• HearthGem.ML – Consumes CARD_IDs as part of DraftState.
+• HearthGem.Data – Supplies card database for fuzzy matching.
+
+3. Key Requirements
+-------------------
+• Triggered Capture only on draft-pick event.
+• Targeted Region Analysis (ROIs for card names).
+• Accurate Extraction (localized names) for 3–5 cards.
+• Language-Agnostic Mapping to CARD_IDs via fuzzy matching.
+• End-to-end latency ≤ 50 ms; overlay latency ≤ 100 ms.
+• Robust to resolution / aspect ratio / graphics settings.
+• Comprehensive error handling with graceful fallback.
+
+4. Implementation Overview
+--------------------------
+Architecture: New `ArenaChoiceDetector` service (HearthGem.ScreenReader).
+Stack: C#/.NET 8, System.Drawing, OpenCVSharp, Tesseract.NET (custom Belwe font), Fastenshtein.
+Workflow: LogParser trigger → capture HS window → extract ROIs → pre-process → OCR → fuzzy match → emit CARD_IDs.
+
+5. Core API Sketch
+------------------
+interface IArenaChoiceDetector
+• DetectOfferedCardsAsync(windowHandle, resolution): List<CARD_ID>
+• OfferedCardsDetected event (success/failure, CARD_IDs, error msg)
+
+6. UX & Error States
+--------------------
+• 50 ms spinner while detecting.
+• On failure show non-blocking "Card detection failed" notice.
+
+7. Testing & Performance
+------------------------
+• Unit: image pre-processing, OCR, matching.
+• Integration: prerecorded draft screenshots.
+• Perf: ensure capture→CARD_ID ≤ 50 ms.
+
+8. Security & Data Handling
+---------------------------
+• Capture only HS window region; no raw images saved.
+• `.traineddata` bundled with app; processed in-memory.
+
+End of PRD 

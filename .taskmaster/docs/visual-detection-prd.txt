@@ -1,0 +1,76 @@
+# Feature: Real-time Arena Choice Visual Detection
+
+## Project Overview
+HearthGem is a Hearthstone Arena assistant application that provides card recommendations during the draft process. The current implementation relies on log files, but certain card information is not always available in these logs. This feature will add visual detection capabilities to identify and extract card names directly from the game screen.
+
+## Core Goals
+1. Accurately identify and extract the names of cards offered during Hearthstone Arena and Underground draft picks using visual detection
+2. Compensate for the absence of card IDs in game logs
+3. Ensure the recommendation system receives complete and timely data
+4. Maintain performance by completing visual analysis within 50ms
+
+## Technical Requirements
+
+### Architecture Integration
+- Integrate with existing modules (LogParser, ML, Data)
+- Trigger screen capture only when draft events are detected
+- Map extracted card names to language-agnostic CARD_IDs
+- Send extracted card data to recommendation engine
+
+### Visual Detection System
+- Focus analysis on predefined regions of interest (ROIs) on the game screen
+- Extract the names of 3-5 offered cards depending on pick type
+- Map extracted names to CARD_IDs using fuzzy matching
+- Ensure resilience to variations in game resolution and graphics settings
+
+### Performance Requirements
+- Complete visual analysis within 50ms (screen capture to CARD_ID mapping)
+- Ensure recommendations are delivered within 100ms overall budget
+- Optimize CPU/GPU usage to minimize impact on game performance
+
+### Error Handling
+- Implement robust error handling for:
+  - Failed screen captures
+  - OCR errors
+  - Unmatchable card names
+- Provide appropriate fallback mechanisms for failed detections
+
+## Technical Implementation
+
+### Technology Stack
+- C# (.NET 8)
+- System.Drawing for screen capture
+- OpenCVSharp for image processing
+- Tesseract OCR for text recognition
+- Fuzzy string matching for card name validation
+
+### Component Overview
+1. Screen Capture Module: Captures the Hearthstone game window
+2. Region Detection: Identifies card regions on screen
+3. OCR Engine: Extracts text from captured regions
+4. Card Mapping: Maps extracted names to CARD_IDs
+5. Integration Layer: Connects to existing HearthGem modules
+
+### Data Flow
+1. LogParser detects draft pick event
+2. Visual detection is triggered
+3. Screen is captured and processed
+4. Card names are extracted and mapped to CARD_IDs
+5. Card data is sent to recommendation engine
+6. User interface is updated with recommendations
+
+### UI Updates
+- Add subtle loading indicator during visual processing
+- Display clear error messages if detection fails
+- Update existing overlay to show visually detected cards
+
+## Testing Strategy
+- Unit tests for image processing functions
+- Integration tests with simulated game screenshots
+- Performance benchmarks against 50ms budget
+- End-to-end testing across various hardware configurations
+
+## Security & Privacy
+- Capture only specific screen regions containing card information
+- Process all image data in-memory without persistent storage
+- Request appropriate OS permissions for screen capture 

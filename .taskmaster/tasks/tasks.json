@@ -1,0 +1,164 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Screen Capture and Card Detection System",
+        "description": "Implement a real-time screen capture and card detection system for Hearthstone Arena draft picks",
+        "details": "Core system requirements:\n1. Screen Capture Module:\n   - Detect and capture Hearthstone game window\n   - Handle different resolutions and scaling\n   - Optimize capture performance (50ms budget)\n   - Implement error handling for failed captures\n\n2. Card Region Detection:\n   - Define and detect regions of interest (ROIs) for Arena cards\n   - Support 3-5 card choice layouts\n   - Handle different aspect ratios and graphics settings\n\n3. Integration Points:\n   - Interface with HearthGem.LogParser for draft pick triggers\n   - Connect with HearthGem.App for UI updates\n   - Feed data to HearthGem.ML for recommendations\n   - Use HearthGem.Data for card validation\n\n4. Performance Requirements:\n   - Complete analysis within 50ms\n   - Maintain real-time responsiveness\n   - Handle resolution variations\n   - Implement fallback mechanisms",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "subtasks": [],
+        "created": "2024-03-21T00:00:00.000Z",
+        "updated": "2024-03-21T00:00:00.000Z"
+      },
+      {
+        "id": "2",
+        "title": "Implement Screen Capture Module",
+        "description": "Detect and capture the Hearthstone game window and specific ROIs for card names",
+        "details": "• Use System.Drawing to capture Graphics.CopyFromScreen for HS window\n• Handle multiple resolutions and scaling (DPI awareness)\n• Define coordinate logic for 3- and 5-card layouts\n• Benchmark raw capture speed to meet ≤20 ms budget",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "3",
+        "title": "Add Image Pre-Processing Pipeline",
+        "description": "Apply OpenCVSharp filters to ROI images to improve OCR accuracy",
+        "details": "• Convert to grayscale\n• Adaptive threshold / Otsu\n• Noise reduction (Gaussian blur)\n• Optional perspective correction\n• Output processed bitmap for OCR",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "4",
+        "title": "Integrate Tesseract.NET OCR",
+        "description": "Extract localized card names from pre-processed ROIs",
+        "details": "• Embed Tesseract.NET\n• Bundle custom Belwe .traineddata\n• Configure engine (single line mode, whitelist A-Z)\n• Return text + confidence per ROI\n• Measure OCR latency ≤15 ms",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "5",
+        "title": "Implement Fuzzy Matching to CARD_IDs",
+        "description": "Map OCR strings to unique CARD_IDs using Fastenshtein distance",
+        "details": "• Query HearthGem.Data card list for current language\n• Compute Levenshtein distance\n• Select match below threshold (e.g., ≤2 edits)\n• Return CARD_ID list",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "6",
+        "title": "Hook ArenaChoiceDetector into LogParser",
+        "description": "Trigger visual detection on DraftChoicePresented events",
+        "details": "• Subscribe to LogParser event\n• Pass window handle + resolution\n• Publish OfferedCardsDetected event",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "5"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "7",
+        "title": "Update DraftViewModel & Overlay UI",
+        "description": "Display spinner during detection and update card displays with results",
+        "details": "• Add IsDetectingCards flag\n• Overlay shows subtle spinner\n• Populate detected cards & trigger ML recommendations",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "6"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "8",
+        "title": "Write Unit Tests for Visual Pipeline",
+        "description": "Ensure each component (capture, processing, OCR, matching) works in isolation",
+        "details": "• Mock screen captures\n• Validate OCR outputs on sample images\n• Assert matching correctness",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "5"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "9",
+        "title": "Integration Tests with Recoded Screenshots",
+        "description": "Full pipeline validation across resolutions and pick layouts",
+        "details": "• Build screenshot dataset\n• Assert CARD_ID accuracy ≥98%\n• Verify latency budget",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "8"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "10",
+        "title": "Performance Benchmark & Optimisation",
+        "description": "Profile end-to-end latency and optimise hot paths",
+        "details": "• Measure capture, processing, OCR, matching timings\n• Parallelise where safe\n• Use hardware acceleration if available",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "9"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "11",
+        "title": "Handle Permissions & Security",
+        "description": "Request OS capture permission and ensure data privacy",
+        "details": "• Implement DPI-aware capture permission prompts\n• Verify no raw screenshots persisted",
+        "status": "pending",
+        "priority": "low",
+        "dependencies": [
+          "2"
+        ],
+        "subtasks": []
+      },
+      {
+        "id": "12",
+        "title": "Robust Error Handling & Fallback",
+        "description": "Gracefully handle failures and inform user",
+        "details": "• Catch capture/OCR errors\n• Retry or fall back to generic recommendations\n• Surface overlay messages",
+        "status": "pending",
+        "priority": "low",
+        "dependencies": [
+          "6"
+        ],
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "currentTag": "master",
+      "lastTaskId": 12,
+      "created": "2025-07-01T04:07:35.032Z",
+      "description": "Tasks for master context"
+    }
+  },
+  "expanded-mvp": {
+    "tasks": [],
+    "metadata": {
+      "created": "2025-07-01T04:07:35.033Z",
+      "updated": "2025-07-01T04:07:35.033Z",
+      "description": "Expanded tasks with detailed subtasks for the visual detection MVP"
+    }
+  }
+}

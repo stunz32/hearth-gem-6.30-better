@@ -19,6 +19,7 @@ export interface Card {
   text?: string;
   imageUrl?: string;
   score?: number;
+  dbfId?: number;  // Add DBF ID support
 }
 
 /**
@@ -27,7 +28,8 @@ export interface Card {
  * @module CardDataService
  */
 export class CardDataService {
-  private cards: Map<string, Card> = new Map();
+  private idMap: Map<string, Card> = new Map();
+  private dbfMap: Map<number, Card> = new Map();  // New map for DBF ID lookups
   private dataDirectory: string;
   private isLoaded: boolean = false;
   
@@ -83,13 +85,22 @@ export class CardDataService {
         const rawData = fs.readFileSync(cardDataPath, 'utf8');
         const cardArray: Card[] = JSON.parse(rawData);
         
-        // Populate the cards map
+        // Populate the cards maps
         cardArray.forEach(card => {
-          this.cards.set(card.id, card);
+          this.idMap.set(card.id, card);
+          
+          // If the card has a dbfId, add it to the dbfMap
+          if (card.dbfId !== undefined) {
+            this.dbfMap.set(card.dbfId, card);
+          }
         });
         
         this.isLoaded = true;
-        logger.info('Card data loaded successfully', { cardCount: cardArray.length });
+        logger.info('Card data loaded successfully', { 
+          cardCount: cardArray.length,
+          idMapSize: this.idMap.size,
+          dbfMapSize: this.dbfMap.size
+        });
       }
     } catch (error) {
       logger.error('Failed to load card data', { error });
@@ -98,30 +109,71 @@ export class CardDataService {
   }
   
   /**
-   * Get card data by ID
-   * @param cardId Card ID to look up
+   * Get card data by ID (either string ID or numeric DBF ID)
+   * @param cardId Card ID or DBF ID to look up
    * @returns Card data or undefined if not found
    */
-  public getCard(cardId: string): Card | undefined {
+  public getCard(cardId: string | number): Card | undefined {
     if (!this.isLoaded) {
       logger.warn('Attempted to get card before data was loaded');
     }
-    return this.cards.get(cardId);
+
+    // If cardId is a string, try to look it up directly
+    if (typeof cardId === 'string') {
+      const card = this.idMap.get(cardId);
+      if (card) return card;
+      
+      // If string lookup fails, try parsing as a number for DBF ID
+      const dbfId = parseInt(cardId, 10);
+      if (!isNaN(dbfId)) {
+        return this.getCardByDbfId(dbfId);
+      }
+    } 
+    // If cardId is a number, assume it's a DBF ID
+    else if (typeof cardId === 'number') {
+      return this.getCardByDbfId(cardId);
+    }
+    
+    return undefined;
   }
   
   /**
-   * Get multiple cards by their IDs
-   * @param cardIds Array of card IDs to look up
+   * Get card data specifically by DBF ID
+   * @param dbfId DBF ID to look up
+   * @returns Card data or undefined if not found
+   */
+  public getCardByDbfId(dbfId: number): Card | undefined {
+    if (!this.isLoaded) {
+      logger.warn('Attempted to get card by DBF ID before data was loaded');
+    }
+    return this.dbfMap.get(dbfId);
+  }
+  
+  /**
+   * Get multiple cards by their IDs (string IDs or numeric DBF IDs)
+   * @param cardIds Array of card IDs or DBF IDs to look up
    * @returns Array of found cards (missing cards are omitted)
    */
-  public getCards(cardIds: string[]): Card[] {
+  public getCards(cardIds: Array<string | number>): Card[] {
     if (!this.isLoaded) {
       logger.warn('Attempted to get cards before data was loaded');
     }
     
     return cardIds
-      .map(id => this.cards.get(id))
+      .map(id => this.getCard(id))
       .filter((card): card is Card => card !== undefined);
+  }
+  
+  /**
+   * Get all cards in the database
+   * @returns Array of all cards
+   */
+  public getAllCards(): Card[] {
+    if (!this.isLoaded) {
+      logger.warn('Attempted to get all cards before data was loaded');
+    }
+    
+    return Array.from(this.idMap.values());
   }
   
   /**
@@ -135,7 +187,7 @@ export class CardDataService {
     }
     
     // If we don't have any cards loaded, create some sample cards
-    if (this.cards.size === 0) {
+    if (this.idMap.size === 0) {
       const sampleCards: Card[] = [
         {
           id: 'SAMPLE001',
@@ -148,7 +200,8 @@ export class CardDataService {
           set: 'CORE',
           text: 'Sample card text for testing.',
           imageUrl: 'https://art.hearthstonejson.com/v1/render/latest/enUS/512x/SAMPLE001.png',
-          score: 85
+          score: 85,
+          dbfId: 1001
         },
         {
           id: 'SAMPLE002',
@@ -159,7 +212,8 @@ export class CardDataService {
           set: 'CORE',
           text: 'Deal 3 damage to a minion.',
           imageUrl: 'https://art.hearthstonejson.com/v1/render/latest/enUS/512x/SAMPLE002.png',
-          score: 70
+          score: 70,
+          dbfId: 1002
         },
         {
           id: 'SAMPLE003',
@@ -172,7 +226,8 @@ export class CardDataService {
           set: 'CORE',
           text: 'Whenever you attack, draw a card.',
           imageUrl: 'https://art.hearthstonejson.com/v1/render/latest/enUS/512x/SAMPLE003.png',
-          score: 90
+          score: 90,
+          dbfId: 1003
         }
       ];
       
@@ -180,7 +235,7 @@ export class CardDataService {
     }
     
     // Otherwise, return a subset of the loaded cards
-    return Array.from(this.cards.values()).slice(0, count);
+    return Array.from(this.idMap.values()).slice(0, count);
   }
   
   /**
@@ -189,7 +244,12 @@ export class CardDataService {
    */
   public async addOrUpdateCard(card: Card): Promise<void> {
     logger.debug('Adding/updating card', { cardId: card.id });
-    this.cards.set(card.id, card);
+    this.idMap.set(card.id, card);
+    
+    if (card.dbfId !== undefined) {
+      this.dbfMap.set(card.dbfId, card);
+    }
+    
     await this.saveCardData();
   }
   
@@ -206,7 +266,7 @@ export class CardDataService {
       }
       
       const cardDataPath = path.join(this.dataDirectory, 'cards.json');
-      const cardArray = Array.from(this.cards.values());
+      const cardArray = Array.from(this.idMap.values());
       
       await fs.promises.writeFile(
         cardDataPath,

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HearthGem - Configure Card Regions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: rgba(0, 0, 0, 0.3);
+            cursor: crosshair;
+            overflow: hidden;
+            user-select: none;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .instructions {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 10;
+            max-width: 600px;
+        }
+
+        .instructions h2 {
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        .instructions p {
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #45a049;
+        }
+
+        .btn-primary:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #da190b;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #e68900;
+        }
+
+        .region-counter {
+            position: fixed;
+            top: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        .region-label {
+            position: absolute;
+            background: rgba(255, 215, 0, 0.9);
+            color: black;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="instructions">
+        <h2>🎯 Configure Card Detection Regions</h2>
+        <p><strong>Instructions:</strong></p>
+        <p>1. Click and drag to draw a rectangle around each card area</p>
+        <p>2. You need to define exactly 3 regions (Card 1, Card 2, Card 3)</p>
+        <p>3. Click on an existing region to redraw it</p>
+        <p>4. Make sure rectangles cover the entire card including borders</p>
+    </div>
+
+    <div class="region-counter">
+        Regions Defined: <span id="regionCount">0</span> / 3
+    </div>
+
+    <div class="controls">
+        <button id="clearBtn" class="btn btn-warning">Clear All</button>
+        <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+        <button id="saveBtn" class="btn btn-primary" disabled>Save Regions</button>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        class RegionSelectorRenderer {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.regions = [];
+                this.isDrawing = false;
+                this.startX = 0;
+                this.startY = 0;
+                this.currentRegion = null;
+                this.nextCardIndex = 1;
+
+                this.initializeCanvas();
+                this.setupEventListeners();
+            }
+
+            initializeCanvas() {
+                // Set canvas size to full screen
+                ipcRenderer.on('screen-dimensions', (_, dimensions) => {
+                    this.canvas.width = dimensions.width;
+                    this.canvas.height = dimensions.height;
+                    this.redraw();
+                });
+            }
+
+            setupEventListeners() {
+                this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
+                this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+                this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
+
+                document.getElementById('saveBtn').addEventListener('click', this.saveRegions.bind(this));
+                document.getElementById('cancelBtn').addEventListener('click', this.cancel.bind(this));
+                document.getElementById('clearBtn').addEventListener('click', this.clearRegions.bind(this));
+
+                // Prevent context menu
+                this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+            }
+
+            onMouseDown(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                // Check if clicking on existing region
+                const clickedRegion = this.findRegionAt(x, y);
+                if (clickedRegion) {
+                    // Remove the clicked region for redrawing
+                    this.regions = this.regions.filter(r => r !== clickedRegion);
+                    this.nextCardIndex = clickedRegion.cardIndex;
+                    this.updateUI();
+                    this.redraw();
+                }
+
+                this.isDrawing = true;
+                this.startX = x;
+                this.startY = y;
+                this.currentRegion = {
+                    x: x,
+                    y: y,
+                    width: 0,
+                    height: 0,
+                    cardIndex: this.nextCardIndex
+                };
+            }
+
+            onMouseMove(e) {
+                if (!this.isDrawing) return;
+
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                this.currentRegion.x = Math.min(this.startX, x);
+                this.currentRegion.y = Math.min(this.startY, y);
+                this.currentRegion.width = Math.abs(x - this.startX);
+                this.currentRegion.height = Math.abs(y - this.startY);
+
+                this.redraw();
+            }
+
+            onMouseUp(e) {
+                if (!this.isDrawing) return;
+
+                this.isDrawing = false;
+
+                // Only add region if it has meaningful size
+                if (this.currentRegion.width > 20 && this.currentRegion.height > 20) {
+                    this.regions.push(this.currentRegion);
+                    this.nextCardIndex = this.getNextCardIndex();
+                    this.updateUI();
+                }
+
+                this.currentRegion = null;
+                this.redraw();
+            }
+
+            findRegionAt(x, y) {
+                return this.regions.find(region => 
+                    x >= region.x && x <= region.x + region.width &&
+                    y >= region.y && y <= region.y + region.height
+                );
+            }
+
+            getNextCardIndex() {
+                const usedIndices = this.regions.map(r => r.cardIndex);
+                for (let i = 1; i <= 3; i++) {
+                    if (!usedIndices.includes(i)) {
+                        return i;
+                    }
+                }
+                return 1; // Fallback
+            }
+
+            redraw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Draw existing regions
+                this.regions.forEach(region => {
+                    this.drawRegion(region, false);
+                });
+
+                // Draw current region being drawn
+                if (this.isDrawing && this.currentRegion) {
+                    this.drawRegion(this.currentRegion, true);
+                }
+
+                this.updateRegionLabels();
+            }
+
+            drawRegion(region, isActive) {
+                const colors = ['#ff4444', '#44ff44', '#4444ff'];
+                const color = colors[(region.cardIndex - 1) % colors.length];
+
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = isActive ? 3 : 2;
+                this.ctx.setLineDash(isActive ? [5, 5] : []);
+                this.ctx.strokeRect(region.x, region.y, region.width, region.height);
+
+                // Fill with semi-transparent color
+                this.ctx.fillStyle = color + '33';
+                this.ctx.fillRect(region.x, region.y, region.width, region.height);
+
+                this.ctx.setLineDash([]);
+            }
+
+            updateRegionLabels() {
+                // Remove existing labels
+                document.querySelectorAll('.region-label').forEach(label => label.remove());
+
+                // Add labels for each region
+                this.regions.forEach(region => {
+                    const label = document.createElement('div');
+                    label.className = 'region-label';
+                    label.textContent = `Card ${region.cardIndex}`;
+                    label.style.left = (region.x + 5) + 'px';
+                    label.style.top = (region.y - 25) + 'px';
+                    document.body.appendChild(label);
+                });
+
+                // Add label for current region being drawn
+                if (this.isDrawing && this.currentRegion && this.currentRegion.width > 20) {
+                    const label = document.createElement('div');
+                    label.className = 'region-label';
+                    label.textContent = `Card ${this.currentRegion.cardIndex}`;
+                    label.style.left = (this.currentRegion.x + 5) + 'px';
+                    label.style.top = (this.currentRegion.y - 25) + 'px';
+                    document.body.appendChild(label);
+                }
+            }
+
+            updateUI() {
+                document.getElementById('regionCount').textContent = this.regions.length;
+                document.getElementById('saveBtn').disabled = this.regions.length !== 3;
+            }
+
+            clearRegions() {
+                this.regions = [];
+                this.nextCardIndex = 1;
+                this.updateUI();
+                this.redraw();
+            }
+
+            async saveRegions() {
+                if (this.regions.length !== 3) {
+                    alert('Please define exactly 3 card regions before saving.');
+                    return;
+                }
+
+                try {
+                    await ipcRenderer.invoke('region-selection-complete', this.regions);
+                } catch (error) {
+                    console.error('Error saving regions:', error);
+                    alert('Error saving regions. Please try again.');
+                }
+            }
+
+            async cancel() {
+                try {
+                    await ipcRenderer.invoke('region-selection-cancel');
+                } catch (error) {
+                    console.error('Error cancelling selection:', error);
+                }
+            }
+        }
+
+        // Initialize when page loads
+        new RegionSelectorRenderer();
+    </script>
+</body>
+</html>

@@ -186,6 +186,21 @@ export class OverlayManager {
   }
 
   /**
+   * Send data to the renderer process
+   * @param channel Channel name
+   * @param data Data to send
+   */
+  public sendToRenderer(channel: string, data: any): void {
+    if (!this.overlayWindow || !this.windowReady) {
+      logger.warn(`Cannot send to renderer on channel ${channel}, window not ready`);
+      return;
+    }
+
+    logger.debug(`Sending data to renderer on channel ${channel}`);
+    this.overlayWindow.webContents.send(channel, data);
+  }
+  
+  /**
    * Destroy the overlay window
    */
   public destroy(): void {

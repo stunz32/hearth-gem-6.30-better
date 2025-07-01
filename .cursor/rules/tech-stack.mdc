@@ -1,0 +1,87 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Tech Stack Rule File for HearthGem
+
+This document provides a concise overview of the primary technologies and architectural patterns used in the HearthGem codebase. Understanding this stack is crucial for developing and maintaining the application effectively.
+
+## NOTE: USE 'context7' TO GET THE LATEST DOCUMENTATION WHEN WORKING WITH CODE AS NEEDED TO GET THE MOST UP TO DATE DOCS ON TECH STACK MODULES
+
+# --- Core Framework & Language ---
+
+## Core Framework
+- .NET 8 (Microsoft .NET platform for building various applications)
+
+## Core Language
+- C# (Primary programming language for all application logic)
+
+# --- Frontend (UI) ---
+
+## UI Framework
+- Windows Presentation Foundation (WPF) (For building the desktop graphical user interface)
+
+## UI Rendering Technology
+- D3DImage (For low-latency, transparent overlay rendering by sharing DirectX textures)
+
+## UI Architectural Pattern
+- Model-View-ViewModel (MVVM) (For separation of concerns between UI and business logic)
+
+## UI State Management
+- INotifyPropertyChanged (For notifying UI of property changes)
+- ObservableCollection<T> (For dynamic lists that automatically update UI)
+- ICommand (For binding UI actions to ViewModel logic)
+
+# --- Backend (Logic & Data) ---
+
+## Backend Architectural Patterns
+- Modular Architecture (Clear separation of concerns into distinct functional modules)
+- Event-Driven Architecture (For real-time communication and loose coupling between modules)
+- Finite-State Machine (FSM) (For tracking complex game states within the LogParser)
+
+## Log Parsing & Game State Management
+- System.IO.FileSystemWatcher (For dynamic discovery and monitoring of Hearthstone log files)
+- Asynchronous File Tailing (C# FileStream + ReadAsync) (For efficient, non-blocking log file reading)
+- Regular Expressions (For robust pattern matching and data extraction from log entries)
+
+## Machine Learning (ML) Inference
+- TensorFlow Lite (For optimized, low-latency client-side ML inference)
+- DirectML (For GPU acceleration of TensorFlow Lite models on Windows)
+
+## Data Storage
+- SQLite (Embedded relational database for structured data like card information, meta-data, and ratings)
+- LiteDB (Embedded NoSQL document database for flexible storage of user preferences and draft history)
+
+# --- Development & Operations (DevOps) ---
+
+## ML Model Training Language
+- Python (Used for offline ML model training due to its rich ecosystem of data science libraries)
+
+## Continuous Integration/Continuous Deployment (CI/CD)
+- GitHub Actions (For automated builds, testing, and ML model retraining)
+
+## Application Deployment
+- MSIX Packaging (For secure, auto-updating application distribution)
+
+# --- Security & Communication ---
+
+## Secure Communication
+- HTTPS (For encrypted communication with external APIs, e.g., ChatGPT)
+
+## Data Encryption (Local)
+- AES-256 Encryption (For securing sensitive user data like API keys stored locally)
+
+# --- General Concepts ---
+
+## Project Management
+- Agile/Scrum (Implied by iterative development and phased approach)
+
+## Testing Methodologies
+- Unit Testing
+- Integration Testing
+- End-to-End Testing
+- Performance Testing
+- Accessibility Testing
+
+

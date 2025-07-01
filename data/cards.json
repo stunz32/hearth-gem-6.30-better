@@ -1,0 +1,84 @@
+[
+  {
+    "id": "EX1_001",
+    "name": "Lightwarden",
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "type": "Minion",
+    "rarity": "Rare",
+    "set": "Classic",
+    "text": "Whenever a character is healed, gain +2 Attack.",
+    "score": 65
+  },
+  {
+    "id": "EX1_002",
+    "name": "The Black Knight",
+    "cost": 6,
+    "attack": 4,
+    "health": 5,
+    "type": "Minion",
+    "rarity": "Legendary",
+    "set": "Classic",
+    "text": "Battlecry: Destroy an enemy minion with Taunt.",
+    "score": 75
+  },
+  {
+    "id": "EX1_003",
+    "name": "Sacrificial Pact",
+    "cost": 0,
+    "type": "Spell",
+    "rarity": "Common",
+    "set": "Classic",
+    "text": "Destroy a Demon. Restore 5 Health to your hero.",
+    "score": 45
+  },
+  {
+    "id": "EX1_004",
+    "name": "Young Priestess",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "type": "Minion",
+    "rarity": "Rare",
+    "set": "Classic",
+    "text": "At the end of your turn, give another random friendly minion +1 Health.",
+    "score": 70
+  },
+  {
+    "id": "EX1_005",
+    "name": "Big Game Hunter",
+    "cost": 5,
+    "attack": 4,
+    "health": 2,
+    "type": "Minion",
+    "rarity": "Epic",
+    "set": "Classic",
+    "text": "Battlecry: Destroy a minion with 7 or more Attack.",
+    "score": 80
+  },
+  {
+    "id": "HERO_01",
+    "name": "Garrosh Hellscream",
+    "type": "Hero",
+    "rarity": "Free",
+    "set": "Basic",
+    "score": 50
+  },
+  {
+    "id": "HERO_02",
+    "name": "Thrall",
+    "type": "Hero",
+    "rarity": "Free",
+    "set": "Basic",
+    "score": 55
+  },
+  {
+    "id": "HERO_03",
+    "name": "Valeera Sanguinar",
+    "type": "Hero",
+    "rarity": "Free",
+    "set": "Basic",
+    "score": 60
+  }
+]

@@ -1,0 +1,66 @@
+{
+  "name": "hearth-gem",
+  "version": "0.1.0",
+  "description": "HearthGem Arena Assistant - A tool for Hearthstone Arena drafts",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "npm run build && electron .",
+    "dev": "tsc -w & electron .",
+    "build": "tsc && node scripts/copy-assets.js",
+    "watch": "tsc -w",
+    "lint": "eslint . --ext .ts",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/hearth-gem.git"
+  },
+  "keywords": [
+    "hearthstone",
+    "arena",
+    "assistant",
+    "overlay",
+    "electron"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "electron-log": "^4.4.8",
+    "winston": "^3.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^18.15.11",
+    "@typescript-eslint/eslint-plugin": "^5.57.1",
+    "@typescript-eslint/parser": "^5.57.1",
+    "electron": "^24.1.2",
+    "electron-builder": "^23.6.0",
+    "eslint": "^8.38.0",
+    "typescript": "^5.0.4"
+  },
+  "build": {
+    "appId": "com.yourusername.hearthgem",
+    "productName": "HearthGem Arena Assistant",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "src/index.html",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  }
+}

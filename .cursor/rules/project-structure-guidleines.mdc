@@ -1,0 +1,152 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Project Structure Guidelines for HearthGem
+
+# This file outlines the standard folder structure for the HearthGem project.
+# It serves as a guide for developers to understand the organization of the codebase
+# and where new files, modules, or features should be placed to maintain consistency
+# and adhere to architectural principles.
+
+# --- Root Directory (HearthGem/) ---
+# The top-level directory for the entire solution.
+
+# src/
+#   Contains all source code projects for the application.
+#   New C# projects should generally be added here, following the naming conventions
+#   and functional separation outlined below.
+
+# data/
+#   Stores application-specific data files that are not part of the source code.
+#   This includes trained ML models, local databases, and application logs.
+#   - ml_models/: Trained TensorFlow Lite models (.tflite files).
+#   - db/: Local databases (e.g., hearthgem.db, user_preferences.db).
+#   - logs/: Application log files.
+#   New data assets should be categorized and placed in appropriate subdirectories.
+
+# scripts/
+#   Contains utility scripts that support development, data processing, or automation.
+#   - train_model.py: Python script for ML model training.
+#   - scrape_heartharena.py: Python script for scraping data.
+#   - update_card_data.py: Python script for updating card data.
+#   New scripts (e.g., for data migration, build automation, testing utilities) should be added here.
+
+# .github/
+#   Contains GitHub Actions workflows for CI/CD and automation.
+#   - workflows/: YAML files defining automated workflows (e.g., nightly_build_and_train.yml).
+#   New CI/CD workflows or automation scripts for GitHub Actions should be placed here.
+
+# docs/
+#   Contains project documentation, diagrams, and design specifications.
+#   - architecture_diagrams/: Architectural diagrams and visual representations.
+#   New documentation (e.g., API documentation, user manuals, design docs) should be added here.
+
+# .gitignore
+#   Specifies intentionally untracked files to ignore by Git.
+#   Should be updated to include any new generated files or sensitive information.
+
+# README.md
+#   The main project README file, providing an overview, setup instructions, and key information.
+#   Should be kept up-to-date with project changes.
+
+# HearthGem.sln
+#   The Visual Studio Solution file, which organizes all C# projects.
+#   Automatically updated when new C# projects are added via Visual Studio.
+
+# --- Source Code Directory (HearthGem/src/) ---
+# Contains individual C# projects, each representing a distinct module or layer of the application.
+# New C# projects should follow the naming convention HearthGem.<ModuleName>.
+
+# HearthGem.App/
+#   The main WPF application project. This is the entry point for the UI.
+#   - App.xaml, App.xaml.cs: Application entry point and global resources.
+#   - MainWindow.xaml, MainWindow.xaml.cs: Main application window.
+#   - Views/: XAML files defining UI views (e.g., DraftView.xaml, DeckStatsView.xaml).
+#     New UI views should be added here.
+#   - ViewModels/: C# classes implementing MVVM ViewModels (e.g., DraftViewModel.cs).
+#     New ViewModels corresponding to new views or complex UI logic should be added here.
+#   - Models/: UI-specific models or Data Transfer Objects (DTOs) that are not core domain models.
+#     New UI-specific data structures should be added here.
+#   - Services/: UI-related services (e.g., OverlayService, NavigationService).
+#     New UI-specific services should be added here.
+#   - Converters/: WPF Value Converters.
+#     New value converters for data binding transformations should be added here.
+#   - Controls/: Reusable custom UI controls.
+#     New custom WPF controls should be added here.
+#   - Properties/: Project properties.
+#   - Resources/: Application resources (e.g., images, styles).
+#   - appsettings.json: Application configuration settings.
+
+# HearthGem.Core/
+#   Contains core application logic, interfaces, and common domain models.
+#   This project defines the contracts and shared types used across multiple modules.
+#   - Contracts/: C# interfaces defining module APIs (e.g., ILogParser.cs, IRecommendationEngine.cs).
+#     New interfaces for cross-module communication should be defined here.
+#   - Models/: Core domain models (e.g., Card.cs, DraftState.cs, GameEvent.cs).
+#     New fundamental data structures representing core business entities should be added here.
+#   - Utilities/: General utility classes used across the application.
+#     New general-purpose utility functions or helper classes should be added here.
+
+# HearthGem.LogParser/
+#   Handles log parsing and data ingestion from Hearthstone game files.
+#   - LogFileMonitor.cs: Monitors log files.
+#   - HearthstoneLogParser.cs: Parses log entries.
+#   - FSM/: Finite State Machine implementation for draft tracking.
+#     New FSM states or transitions should be added here.
+#   - Models/: Log-specific data models (e.g., LogEntry.cs).
+#     New data structures specific to log parsing should be added here.
+#   - Exceptions/: Custom exceptions related to log parsing.
+#     New custom exceptions for log parsing errors should be defined here.
+
+# HearthGem.ML/
+#   Manages machine learning inference and data preparation for recommendations.
+#   - RecommendationEngine.cs: Core ML recommendation logic.
+#   - Models/: ML model input/output structures (e.g., MLInput.cs, MLOutput.cs).
+#     New data structures for ML model interaction should be added here.
+#   - Delegates/: Integration with DirectML or other ML delegates.
+#     New platform-specific ML integration code should be placed here.
+#   - DataProcessors/: Feature engineering logic.
+#     New feature extraction or data preprocessing logic should be added here.
+
+# HearthGem.Data/
+#   The data access layer, abstracting interactions with databases.
+#   - LiteDbRepository.cs: Handles LiteDB interactions.
+#   - SQLiteRepository.cs: Handles SQLite interactions.
+#   - Models/: Database-specific models (e.g., UserPreferences.cs, CardData.cs).
+#     New models representing database entities should be added here.
+#   - Migrations/: Database migration scripts or logic.
+#     New database schema migration logic should be added here.
+
+# HearthGem.ConversationalAI/
+#   Module for conversational AI features, including local NLP and ChatGPT integration.
+#   - LocalNLP/: Local Natural Language Processing components.
+#     New local NLP models or processing logic should be added here.
+#   - ChatGPT/: ChatGPT API client and related models.
+#     New external AI service integrations should be added here.
+#   - ConversationManager.cs: Manages conversational flow.
+#     New conversational logic should be added here.
+
+# HearthGem.Tests/
+#   Contains all unit and integration test projects.
+#   - HearthGem.App.Tests/: Tests for the UI layer.
+#   - HearthGem.LogParser.Tests/: Tests for the log parsing module.
+#   - HearthGem.ML.Tests/: Tests for the machine learning module.
+#   New test projects should be added here, mirroring the structure of the `src/` directory.
+
+# HearthGem.Common/
+#   Contains shared utilities, constants, and enums used across multiple projects.
+#   - Constants.cs: Global constants.
+#   - Enums.cs: Global enumerations.
+#   New widely used constants, enums, or very small, generic utility classes should be added here.
+
+# --- General Guidelines for New Additions ---
+
+# 1. Identify the most appropriate existing module for your new code.
+# 2. If a new, distinct functional area is being added, consider creating a new `HearthGem.<ModuleName>/` project within `src/`.
+# 3. Follow existing naming conventions and coding standards within each module.
+# 4. Ensure new additions are properly integrated into the Visual Studio solution (`HearthGem.sln`).
+# 5. Update relevant documentation (e.g., `README.md`, `docs/`) for significant structural changes.
+
+# 6. Add corresponding test cases in the `HearthGem.Tests/` directory.

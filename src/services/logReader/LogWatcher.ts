@@ -243,7 +243,7 @@ export class LogWatcher extends EventEmitter {
         if (!this.seenCardIds.has(cardId)) {
           logger.info('New card detected in draft deck', { cardId });
           this.seenCardIds.add(cardId);
-          this.emit('draftCardDetected', cardId);
+        this.emit('draftCardDetected', cardId);
         } else {
           logger.debug('Duplicate card detected, skipping', { cardId });
         }

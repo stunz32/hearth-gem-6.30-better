@@ -4,13 +4,14 @@
   "description": "HearthGem Arena Assistant - A tool for Hearthstone Arena drafts",
   "main": "dist/main.js",
   "scripts": {
-    "start": "npm run build && electron .",
+    "start": "electron-forge start",
     "dev": "tsc -w & electron .",
     "build": "tsc && node scripts/copy-assets.js",
     "watch": "tsc -w",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint --ext .ts,.tsx .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "test-ocr": "npx ts-node scripts/batch-ocr-test.ts"
   },
   "repository": {
     "type": "git",
@@ -26,20 +27,29 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "canvas": "^3.1.2",
     "chokidar": "^3.5.3",
     "electron-log": "^4.4.8",
+    "minimist": "^1.2.8",
+    "sharp": "^0.34.2",
     "string-similarity": "^4.0.4",
     "tesseract.js": "^6.0.1",
-    "winston": "^3.8.2"
+    "winston": "^3.8.2",
+    "yargs": "^18.0.0",
+    "upscaler": "^1.0.0-beta.19",
+    "@upscalerjs/esrgan-slim": "^1.0.0-beta.12"
   },
   "devDependencies": {
+    "@types/minimist": "^1.2.5",
     "@types/node": "^18.15.11",
     "@types/string-similarity": "^4.0.2",
+    "@types/yargs": "^17.0.33",
     "@typescript-eslint/eslint-plugin": "^5.57.1",
     "@typescript-eslint/parser": "^5.57.1",
     "electron": "^24.1.2",
     "electron-builder": "^23.6.0",
     "eslint": "^8.38.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.0.4"
   },
   "build": {

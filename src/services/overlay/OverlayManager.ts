@@ -50,20 +50,20 @@ export class OverlayManager {
       height: 600
     };
 
-    this.overlayWindow = new BrowserWindow({
+      this.overlayWindow = new BrowserWindow({
       ...this.position,
       frame: true,
       title: 'HearthGem Arena Assistant',
       backgroundColor: '#2d2d2d',
       show: true,
-      alwaysOnTop: true,
-      skipTaskbar: false,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
-      }
-    });
-
+        alwaysOnTop: true,
+        skipTaskbar: false,
+        webPreferences: {
+          nodeIntegration: true,
+          contextIsolation: false
+        }
+      });
+      
     const indexPath = path.join(__dirname, '../../index.html');
     this.overlayWindow.loadFile(indexPath);
     
@@ -79,7 +79,7 @@ export class OverlayManager {
         this.overlayWindow.show();
         this.overlayWindow.focus();
         this.isVisible = true;
-        
+      
         if (this.pendingCards) {
           this.displayCards(this.pendingCards);
           this.pendingCards = null;
@@ -87,12 +87,12 @@ export class OverlayManager {
       }
     });
 
-    this.overlayWindow.on('closed', () => {
-      logger.info('Overlay window closed');
-      this.overlayWindow = null;
+      this.overlayWindow.on('closed', () => {
+        logger.info('Overlay window closed');
+        this.overlayWindow = null;
       this.windowReady = false;
-    });
-
+      });
+      
     logger.info('Overlay window created');
   }
   
@@ -153,10 +153,10 @@ export class OverlayManager {
       this.pendingCards = cards;
       return;
     }
-
+    
     logger.info('Displaying cards:', { count: cards.length });
     this.overlayWindow.webContents.send('update-cards', cards);
-    this.show();
+      this.show();
   }
   
   /**
@@ -199,7 +199,7 @@ export class OverlayManager {
     logger.debug(`Sending data to renderer on channel ${channel}`);
     this.overlayWindow.webContents.send(channel, data);
   }
-  
+
   /**
    * Destroy the overlay window
    */

@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import { CaptureResult } from '../capture/ScreenCaptureService';
 
 /**
- * Interface for OCR result
+ * OCR result from processing an image
  */
 export interface OCRResult {
   text: string;
@@ -16,89 +16,65 @@ export interface OCRResult {
 }
 
 /**
- * OCRService
- * Handles OCR processing for card name detection
- * @module OCRService
+ * Service for optical character recognition (OCR)
  */
 export class OCRService extends EventEmitter {
   private worker: Tesseract.Worker | null = null;
-  private isInitialized: boolean = false;
-  private isInitializing: boolean = false;
-  private resultCache: Map<string, OCRResult> = new Map();
-  private readonly CACHE_TTL_MS = 60000; // 1 minute cache TTL
+  private isInitializing = false;
+  private isInitialized = false;
   
   constructor() {
     super();
-    logger.info('OCRService initialized');
   }
   
   /**
    * Initialize the OCR worker
-   * @returns Promise resolving when worker is ready
    */
   public async initialize(): Promise<void> {
-    if (this.isInitialized) return;
-    if (this.isInitializing) {
-      // Wait for initialization to complete
-      return new Promise<void>((resolve) => {
-        this.once('initialized', () => resolve());
-      });
+    if (this.isInitialized || this.isInitializing) {
+      return;
     }
     
     this.isInitializing = true;
-    logger.info('Initializing OCR worker');
     
     try {
-      // Create and initialize worker with English language
-      this.worker = await createWorker('eng');
+      // Create and initialize Tesseract worker
+      // Use English language model
+      this.worker = await createWorker('eng', OEM.LSTM_ONLY);
       
-      // Configure worker for better card name recognition
+      // Configure Tesseract for card name recognition
+      // PSM.SINGLE_LINE - Treat the image as a single line of text (card names are usually single line)
+      // Only recognize standard letters, numbers, and minimal punctuation in card names
       await this.worker.setParameters({
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\'",: -',
-        tessedit_pageseg_mode: PSM.SINGLE_LINE, // Assume card names are single lines of text
-        tessedit_ocr_engine_mode: OEM.LSTM_ONLY, // Use LSTM neural network for better accuracy
-        tessjs_create_hocr: '0',
-        tessjs_create_tsv: '0',
-        tessjs_create_box: '0',
-        tessjs_create_unlv: '0',
-        tessjs_create_osd: '0',
-        tessjs_textonly_pdf: '0',
-        load_system_dawg: '1',
-        language_model_penalty_non_dict_word: '0.8',
-        language_model_penalty_non_freq_dict_word: '0.1',
-        textord_min_linesize: '1.5',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\'\",.- ',
+        tessedit_pageseg_mode: PSM.SINGLE_LINE,
+        // Force DPI heuristics that expect ~300dpi
+        user_defined_dpi: '300',
+        // No inversion, no extra outputs
+        tessedit_do_invert: 0,
+        tessjs_create_hocr: 0,
+        tessjs_create_tsv: 0,
+        // Disable system dictionaries – fantasy names are non-dictionary anyway
+        load_system_dawg: 0,
+        load_freq_dawg: 0,
+        // Reduce penalties – but we rely on fuzzy matcher later
+        language_model_penalty_non_dict_word: 0.1,
+        language_model_penalty_non_freq_dict_word: 0.05
       });
       
       this.isInitialized = true;
-      this.isInitializing = false;
-      logger.info('OCR worker initialized successfully');
-      this.emit('initialized');
+      logger.info('OCR worker initialized', {});
     } catch (error) {
-      this.isInitializing = false;
       logger.error('Failed to initialize OCR worker', { error });
-      throw new Error(`Failed to initialize OCR worker: ${error}`);
+      this.isInitializing = false;
+      throw error;
     }
   }
   
   /**
-   * Terminate the OCR worker
-   */
-  public async terminate(): Promise<void> {
-    if (this.worker) {
-      logger.info('Terminating OCR worker');
-      await this.worker.terminate();
-      this.worker = null;
-      this.isInitialized = false;
-    }
-    
-    // Clear the cache
-    this.resultCache.clear();
-  }
-  
-  /**
-   * Process captured image regions with OCR
-   * @param captureResults Array of capture results to process
-   * @returns Promise resolving to array of OCR results
+   * Process images with OCR
+   * @param captureResults Image capture results to process
+   * @returns Promise resolving to OCR results
    */
   public async processImages(captureResults: CaptureResult[]): Promise<OCRResult[]> {
     // Initialize worker if needed
@@ -129,51 +105,62 @@ export class OCRService extends EventEmitter {
           region: captureResult.region.name,
           timestamp: captureResult.timestamp,
           success: false,
-          error: captureResult.error || 'Invalid capture result'
+          error: 'Invalid capture result'
         });
         continue;
       }
       
-      // Check cache first
-      const cacheKey = `${captureResult.region.name}-${captureResult.timestamp}`;
-      if (this.resultCache.has(cacheKey)) {
-        results.push(this.resultCache.get(cacheKey)!);
-        continue;
-      }
-      
       try {
-        logger.debug('Processing image with OCR', { region: captureResult.region.name });
-        
-        // Recognize text in the image
+        // Process with OCR
         const { data } = await this.worker.recognize(captureResult.dataUrl);
         
-        // Extract text and confidence
-        const text = data.text.trim();
-        const confidence = data.confidence / 100; // Convert to 0-1 range
+        // Clean up text - Hearthstone card names don't have multiple spaces or weird chars
+        let text = data.text.replace(/\s+/g, ' ').trim();
         
-        logger.debug('OCR result', { region: captureResult.region.name, text, confidence });
+        // Remove characters that are unlikely to be in card names
+        text = text.replace(/[^a-zA-Z0-9',\- ]/g, '');
         
-        const ocrResult: OCRResult = {
+        // Capitalize words for consistency (Hearthstone card names are Title Case)
+        text = text.split(' ').map(word => {
+          return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+        
+        const confidence = data.confidence / 100; // Normalize to 0-1
+        
+        // Enhanced debug logging
+        if (text.length > 0) {
+          logger.info('OCR detected text', { 
+            region: captureResult.region.name, 
+            text, 
+            confidence: confidence.toFixed(2),
+            rawLength: text.length
+          });
+        } else {
+          logger.warn('OCR returned empty text', { 
+            region: captureResult.region.name, 
+            confidence: confidence.toFixed(2),
+            isEmpty: text.length === 0,
+            dataUrlLength: captureResult.dataUrl.length
+          });
+        }
+        
+        results.push({
           text,
           confidence,
           region: captureResult.region.name,
           timestamp: captureResult.timestamp,
           success: true
-        };
+        });
         
-        // Cache the result
-        this.resultCache.set(cacheKey, ocrResult);
-        
-        // Schedule cache cleanup
-        setTimeout(() => {
-          this.resultCache.delete(cacheKey);
-        }, this.CACHE_TTL_MS);
-        
-        results.push(ocrResult);
-      } catch (error) {
-        logger.error('Error processing image with OCR', { 
+        this.emit('ocr-complete', { 
           region: captureResult.region.name, 
-          error 
+          text, 
+          confidence 
+        });
+      } catch (error) {
+        logger.error('Error processing image with OCR', {
+          error,
+          region: captureResult.region.name
         });
         
         results.push({
@@ -182,12 +169,27 @@ export class OCRService extends EventEmitter {
           region: captureResult.region.name,
           timestamp: captureResult.timestamp,
           success: false,
-          error: `OCR processing failed: ${error}`
+          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     }
     
     return results;
+  }
+  
+  /**
+   * Destroy the OCR worker
+   */
+  public async destroy(): Promise<void> {
+    if (this.worker) {
+      try {
+        await this.worker.terminate();
+        this.worker = null;
+        this.isInitialized = false;
+      } catch (error) {
+        logger.error('Error destroying OCR worker', { error });
+      }
+    }
   }
 }
 

@@ -129,6 +129,9 @@ class HearthGemRenderer {
 
     // Setup UI button handlers
     this.setupUIHandlers();
+    
+    // Setup scroll buttons
+    this.setupScrollButtons();
   }
 
   /**
@@ -753,6 +756,62 @@ class HearthGemRenderer {
     
     // Show the detected cards panel
     this.detectedCardsElement.style.display = 'block';
+  }
+
+  /**
+   * Setup scroll buttons functionality
+   */
+  private setupScrollButtons(): void {
+    const scrollUpBtn = document.getElementById('scroll-up');
+    const scrollDownBtn = document.getElementById('scroll-down');
+    
+    if (scrollUpBtn) {
+      scrollUpBtn.addEventListener('click', () => {
+        window.scrollBy({
+          top: -300,
+          behavior: 'smooth'
+        });
+      });
+    }
+    
+    if (scrollDownBtn) {
+      scrollDownBtn.addEventListener('click', () => {
+        window.scrollBy({
+          top: 300,
+          behavior: 'smooth'
+        });
+      });
+    }
+    
+    // Show/hide scroll buttons based on scroll position
+    window.addEventListener('scroll', () => {
+      const scrollUpBtn = document.getElementById('scroll-up');
+      const scrollDownBtn = document.getElementById('scroll-down');
+      
+      if (scrollUpBtn) {
+        scrollUpBtn.style.display = window.scrollY > 100 ? 'flex' : 'none';
+      }
+      
+      if (scrollDownBtn) {
+        const maxScroll = document.body.scrollHeight - window.innerHeight;
+        scrollDownBtn.style.display = window.scrollY < maxScroll - 100 ? 'flex' : 'none';
+      }
+    });
+    
+    // Initial check for scroll button visibility
+    setTimeout(() => {
+      const scrollUpBtn = document.getElementById('scroll-up');
+      const scrollDownBtn = document.getElementById('scroll-down');
+      
+      if (scrollUpBtn) {
+        scrollUpBtn.style.display = window.scrollY > 100 ? 'flex' : 'none';
+      }
+      
+      if (scrollDownBtn) {
+        const maxScroll = document.body.scrollHeight - window.innerHeight;
+        scrollDownBtn.style.display = window.scrollY < maxScroll - 100 ? 'flex' : 'none';
+      }
+    }, 500);
   }
 }
 

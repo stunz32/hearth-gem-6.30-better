@@ -10,7 +10,58 @@
             background-color: rgba(25, 25, 25, 0.9);
             font-family: 'Belwe', 'Cinzel', serif;
             color: #FFF;
-            overflow: hidden;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #CF9C38;
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FFD700;
+        }
+        
+        /* Scroll buttons */
+        .scroll-buttons {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        .scroll-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #CF9C38;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            border: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.2s;
+        }
+        
+        .scroll-button:hover {
+            background: #FFD700;
         }
         
         /* Main Styles */
@@ -351,24 +402,6 @@
             font-size: 14px;
         }
 
-        /* Scrollbar Styling */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #333;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #666;
-            border-radius: 3px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #888;
-        }
-        
         /* Advanced Options */
         .advanced-options-container {
             background: rgba(0, 0, 0, 0.4);
@@ -647,6 +680,12 @@
                 </div>
             </div>
         </div>
+    </div>
+    
+    <!-- Scroll buttons -->
+    <div class="scroll-buttons">
+        <button id="scroll-up" class="scroll-button" title="Scroll Up">▲</button>
+        <button id="scroll-down" class="scroll-button" title="Scroll Down">▼</button>
     </div>
     
     <script>

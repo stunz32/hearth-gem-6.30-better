@@ -4,8 +4,10 @@ import { EventEmitter } from 'events';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
-import pixelmatch from 'pixelmatch';
-import { PNG } from 'pngjs';
+
+// Use require instead of import to avoid TypeScript errors
+const pixelmatch = require('pixelmatch');
+const { PNG } = require('pngjs');
 
 /**
  * Interface for template match result
@@ -479,20 +481,21 @@ export class RegionDetector extends EventEmitter {
   }
   
   /**
-   * Capture the entire screen
-   * @param displayId Display ID to capture
-   * @returns Promise resolving to screen capture as Buffer or null if failed
+   * Capture the screen
+   * @param displayId ID of the display to capture
+   * @returns Promise resolving to the screen capture buffer or null
+   * @private
    */
   private async captureScreen(displayId: number): Promise<Buffer | null> {
     try {
-      // Get all sources
+      // Get all display sources
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: { width: 1920, height: 1080 } // Adjust as needed
+        thumbnailSize: { width: 0, height: 0 } // No thumbnails needed
       });
       
-      // Find the source for the specified display
-      const source = sources.find(s => s.display_id === displayId);
+      // Find the matching display source
+      const source = sources.find(s => s.display_id === String(displayId));
       
       if (!source || !source.thumbnail) {
         logger.error('Screen source not found', { displayId });

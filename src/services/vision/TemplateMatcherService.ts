@@ -2,8 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import logger from '../../utils/logger';
 import sharp from 'sharp';
-import { PNG } from 'pngjs';
-import pixelmatch from 'pixelmatch';
+
+// Use require instead of import to avoid TypeScript errors
+const pixelmatch = require('pixelmatch');
+const { PNG } = require('pngjs');
 
 /**
  * Interface for template match result

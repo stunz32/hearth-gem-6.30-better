@@ -172,7 +172,7 @@ async function detectCardRegions() {
     
     if (result) {
       updateStatus('Card regions detected');
-    } else {
+      } else {
       updateStatus('Failed to detect card regions');
     }
   } catch (error) {

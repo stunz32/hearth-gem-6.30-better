@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
-import chokidar from 'chokidar';
+import * as chokidar from 'chokidar';
 import logger from '../../utils/logger';
 
 /**

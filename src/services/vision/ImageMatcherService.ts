@@ -2,10 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import logger from '../../utils/logger';
 import sharp from 'sharp';
-import { imageHash } from 'image-hash';
 import { promisify } from 'util';
-import pixelmatch from 'pixelmatch';
-import { PNG } from 'pngjs';
+
+// Use require instead of import to avoid TypeScript errors
+const imageHash = require('image-hash').imageHash;
+const pixelmatch = require('pixelmatch');
+const { PNG } = require('pngjs');
 
 // Promisify the imageHash function
 const imageHashAsync = promisify(imageHash);

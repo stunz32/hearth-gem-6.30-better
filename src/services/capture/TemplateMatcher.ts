@@ -1,10 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
-import pixelmatch from 'pixelmatch';
 import { EventEmitter } from 'events';
 import logger from '../../utils/logger';
 import { CaptureResult } from './ScreenCaptureService';
+
+// Use require instead of import to avoid TypeScript errors
+const pixelmatch = require('pixelmatch');
 
 /**
  * Interface for a template match result

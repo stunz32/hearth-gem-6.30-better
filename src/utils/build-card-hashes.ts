@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import axios from 'axios';
 import sharp from 'sharp';
-import { imageHash } from 'image-hash';
 import { promisify } from 'util';
 import logger from './logger';
+
+// Use require instead of import to avoid TypeScript errors
+const axios = require('axios');
+const imageHash = require('image-hash').imageHash;
 
 // Promisify the imageHash function
 const imageHashAsync = promisify(imageHash);

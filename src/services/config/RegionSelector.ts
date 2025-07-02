@@ -1,5 +1,5 @@
 import { BrowserWindow, screen, ipcMain } from 'electron';
-import { logger } from '../../utils/logger';
+import logger from '../../utils/logger';
 import { CardRegion } from './RegionConfigService';
 
 export interface RegionSelectionResult {

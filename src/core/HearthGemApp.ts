@@ -24,7 +24,7 @@ export class HearthGemApp {
   private cardMatcher: CardMatcher;
   private imageMatcher: ImageMatcher | null = null;
   private templateMatcher: TemplateMatcher | null = null;
-  private visualDetector: VisualDraftDetector;
+  private visualDetector: VisualDraftDetector | null = null;
   private draftDetector: ArenaDraftDetector;
   private cardDataService: CardDataService;
   private overlayManager: OverlayManager;
@@ -49,10 +49,13 @@ export class HearthGemApp {
     this.cardMatcher = new CardMatcher();
     this.templateMatcher = new TemplateMatcher();
     
+    // Initialize visual detector - will be properly initialized in start() method
+    this.visualDetector = null;
+    
     // ImageMatcher will be initialized after CardDataService is loaded
     this.draftDetector = new ArenaDraftDetector(
       this.logWatcher,
-      this.visualDetector,
+      undefined, // Will set visualDetector after initialization
       this.useVisualDetection
     );
     this.cardDataService = new CardDataService();
@@ -89,10 +92,11 @@ export class HearthGemApp {
         this.ocrService,
         this.cardMatcher,
         this.imageMatcher,
-        this.templateMatcher
+        this.templateMatcher || undefined
       );
       
-      // Update draft detector with card data
+      // Update draft detector with visual detector and card data
+      this.draftDetector.setVisualDetection(true);
       this.draftDetector.setCardData(allCards);
       
       // Create and show overlay
@@ -142,7 +146,7 @@ export class HearthGemApp {
     
     try {
       if (this.draftDetector) {
-    this.draftDetector.stop();
+        this.draftDetector.stop();
       }
 
       if (this.logWatcher) {
@@ -157,12 +161,12 @@ export class HearthGemApp {
         this.regionSelector.dispose();
       }
 
-      this.ocrService.terminate().catch(error => {
-        logger.error('Error terminating OCR service', { error });
+      this.ocrService.destroy().catch(error => {
+        logger.error('Error destroying OCR service', { error });
       });
-    this.overlayManager.destroy();
+      this.overlayManager.destroy();
     
-    logger.info('HearthGem Arena Assistant stopped');
+      logger.info('HearthGem Arena Assistant stopped');
     } catch (error) {
       logger.error('Error stopping application', { error });
     }
@@ -181,7 +185,7 @@ export class HearthGemApp {
     
     try {
       // Run test detection
-      const result = await this.visualDetector.testDetection(options);
+      const result = await this.visualDetector?.testDetection(options);
       
       // Send results to UI
       this.overlayManager.sendToRenderer('visual-detection-test-results', result);

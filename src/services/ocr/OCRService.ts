@@ -158,7 +158,7 @@ export class OCRService extends EventEmitter {
           confidence 
         });
       } catch (error) {
-        logger.error('Error processing image with OCR', {
+        logger.error('Error processing image with OCR', { 
           error,
           region: captureResult.region.name
         });

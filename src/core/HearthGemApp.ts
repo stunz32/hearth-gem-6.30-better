@@ -9,6 +9,8 @@ import ScreenCaptureService from '../services/capture/ScreenCaptureService';
 import OCRService from '../services/ocr/OCRService';
 import VisualDraftDetector from '../services/logReader/VisualDraftDetector';
 import { RegionSelector } from '../services/config/RegionSelector';
+import { ImageMatcher } from '../services/capture/ImageMatcher';
+import { TemplateMatcher } from '../services/capture/TemplateMatcher';
 
 /**
  * HearthGemApp
@@ -20,6 +22,8 @@ export class HearthGemApp {
   private screenCapture: ScreenCaptureService;
   private ocrService: OCRService;
   private cardMatcher: CardMatcher;
+  private imageMatcher: ImageMatcher | null = null;
+  private templateMatcher: TemplateMatcher | null = null;
   private visualDetector: VisualDraftDetector;
   private draftDetector: ArenaDraftDetector;
   private cardDataService: CardDataService;
@@ -28,6 +32,7 @@ export class HearthGemApp {
   private totalPicks: number = 30; // Standard arena draft has 30 picks
   private detectedCards: Set<string> = new Set(); // Track unique card IDs
   private useVisualDetection: boolean = true; // Enable visual detection by default
+  private useImageMatching: boolean = true; // Enable image matching by default
   private regionSelector: RegionSelector;
   private overlayWindow: BrowserWindow | null = null;
   
@@ -42,11 +47,9 @@ export class HearthGemApp {
     this.screenCapture = new ScreenCaptureService();
     this.ocrService = new OCRService();
     this.cardMatcher = new CardMatcher();
-    this.visualDetector = new VisualDraftDetector(
-      this.screenCapture,
-      this.ocrService,
-      this.cardMatcher
-    );
+    this.templateMatcher = new TemplateMatcher();
+    
+    // ImageMatcher will be initialized after CardDataService is loaded
     this.draftDetector = new ArenaDraftDetector(
       this.logWatcher,
       this.visualDetector,
@@ -76,6 +79,19 @@ export class HearthGemApp {
       const allCards = Array.from(this.cardDataService.getAllCards());
       this.cardMatcher.setCards(allCards);
       
+      // Initialize image matcher with card data service
+      this.imageMatcher = new ImageMatcher(this.cardDataService);
+      logger.info('Image matcher initialized');
+      
+      // Initialize visual detector with all services
+      this.visualDetector = new VisualDraftDetector(
+        this.screenCapture,
+        this.ocrService,
+        this.cardMatcher,
+        this.imageMatcher,
+        this.templateMatcher
+      );
+      
       // Update draft detector with card data
       this.draftDetector.setCardData(allCards);
       
@@ -96,7 +112,7 @@ export class HearthGemApp {
       const sampleCards = await this.cardDataService.getSampleCards(3);
       if (sampleCards.length > 0) {
         logger.info('Displaying sample cards:', { cards: sampleCards.map(c => c.name) });
-        this.overlayManager.displayCards(sampleCards);
+      this.overlayManager.displayCards(sampleCards);
       } else {
         logger.warn('No sample cards available to display');
       }
@@ -126,7 +142,7 @@ export class HearthGemApp {
     
     try {
       if (this.draftDetector) {
-        this.draftDetector.stop();
+    this.draftDetector.stop();
       }
 
       if (this.logWatcher) {
@@ -144,9 +160,9 @@ export class HearthGemApp {
       this.ocrService.terminate().catch(error => {
         logger.error('Error terminating OCR service', { error });
       });
-      this.overlayManager.destroy();
-      
-      logger.info('HearthGem Arena Assistant stopped');
+    this.overlayManager.destroy();
+    
+    logger.info('HearthGem Arena Assistant stopped');
     } catch (error) {
       logger.error('Error stopping application', { error });
     }
@@ -217,7 +233,7 @@ export class HearthGemApp {
       }
       
       // Always keep the overlay visible regardless of state
-      if (!this.overlayManager.isOverlayVisible()) {
+        if (!this.overlayManager.isOverlayVisible()) {
         this.overlayManager.show();
       }
     });
@@ -367,6 +383,17 @@ export class HearthGemApp {
       this.updateLogStatus(`🔍 Visual detection ${enabled ? 'enabled' : 'disabled'}`, 'active');
     });
     
+    // Handle toggle image matching
+    ipcMain.on('toggle-image-matching', (_, enabled) => {
+      this.useImageMatching = enabled;
+      if (this.visualDetector) {
+        // Pass the setting to the test method
+        this.visualDetector.testDetection({ useImageMatching: enabled });
+      }
+      logger.info('Image matching toggled', { enabled });
+      this.updateLogStatus(`🖼️ Image matching ${enabled ? 'enabled' : 'disabled'}`, 'active');
+    });
+    
     // Handle test visual detection
     ipcMain.on('test-visual-detection', async (_, options) => {
       logger.info('Testing visual detection', { options });
@@ -396,7 +423,7 @@ export class HearthGemApp {
           
           // Send detailed test results to renderer
           this.overlayManager.sendToRenderer('visual-detection-test-results', result);
-        } else {
+      } else {
           this.updateLogStatus('❌ No cards matched', 'error');
           
           // Send empty results to renderer
@@ -407,11 +434,11 @@ export class HearthGemApp {
             error: 'No cards matched',
             testResults: result.testResults
           });
-        }
+      }
       } catch (error) {
         logger.error('Error testing visual detection', { error });
         this.updateLogStatus(`❌ Visual detection error: ${error}`, 'error');
-        
+    
         // Send error to renderer
         this.overlayManager.sendToRenderer('visual-detection-test-results', {
           success: false,

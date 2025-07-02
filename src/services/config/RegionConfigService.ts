@@ -1,137 +1,216 @@
-import { app } from 'electron';
-import * as path from 'path';
-import * as fs from 'fs/promises';
-import { logger } from '../../utils/logger';
+import fs from 'fs';
+import path from 'path';
+import logger from '../../utils/logger';
 
+/**
+ * Interface for card region configuration
+ */
 export interface CardRegion {
+  cardIndex: number;
   x: number;
   y: number;
   width: number;
   height: number;
-  cardIndex: number; // 1, 2, or 3
-}
-
-export interface RegionConfig {
-  regions: CardRegion[];
-  screenResolution: { width: number; height: number };
-  lastUpdated: string;
-  version: string;
 }
 
 /**
- * Service for managing manual card region configurations
- * Allows users to define and save custom card detection areas
+ * Interface for screen configuration
+ */
+export interface ScreenConfig {
+  width: number;
+  height: number;
+  regions: CardRegion[];
+}
+
+/**
+ * RegionConfigService
+ * Manages configuration for card regions
  */
 export class RegionConfigService {
-  private configPath: string;
-  private currentConfig: RegionConfig | null = null;
-
-  constructor() {
-    const userDataPath = app.getPath('userData');
-    this.configPath = path.join(userDataPath, 'card-regions.json');
-    logger.info('RegionConfigService initialized', { configPath: this.configPath });
-  }
-
+  private static readonly CONFIG_DIR = 'data/config';
+  private static readonly CONFIG_FILE = 'regions.json';
+  
   /**
-   * Load saved region configuration
+   * Creates a new RegionConfigService instance
    */
-  async loadConfig(): Promise<RegionConfig | null> {
-    try {
-      const data = await fs.readFile(this.configPath, 'utf8');
-      this.currentConfig = JSON.parse(data);
-      logger.info('Region config loaded', { 
-        regionCount: this.currentConfig?.regions.length,
-        resolution: this.currentConfig?.screenResolution 
-      });
-      return this.currentConfig;
-    } catch (error) {
-      if ((error as any).code !== 'ENOENT') {
-        logger.error('Error loading region config', { error });
+  constructor() {
+    this.ensureConfigDirectory();
+  }
+  
+  /**
+   * Ensure the configuration directory exists
+   */
+  private ensureConfigDirectory(): void {
+    const configDir = path.join(process.cwd(), RegionConfigService.CONFIG_DIR);
+    
+    if (!fs.existsSync(configDir)) {
+      try {
+        fs.mkdirSync(configDir, { recursive: true });
+        logger.info('Created config directory', { path: configDir });
+      } catch (error) {
+        logger.error('Failed to create config directory', { path: configDir, error });
       }
-      return null;
     }
   }
-
+  
+  /**
+   * Get the path to the configuration file
+   */
+  private getConfigPath(): string {
+    return path.join(process.cwd(), RegionConfigService.CONFIG_DIR, RegionConfigService.CONFIG_FILE);
+  }
+  
   /**
    * Save region configuration
+   * @param regions Card regions to save
+   * @param screenSize Screen size
    */
-  async saveConfig(regions: CardRegion[], screenResolution: { width: number; height: number }): Promise<void> {
-    const config: RegionConfig = {
-      regions: regions.sort((a, b) => a.cardIndex - b.cardIndex),
-      screenResolution,
-      lastUpdated: new Date().toISOString(),
-      version: '1.0'
-    };
-
+  async saveConfig(regions: CardRegion[], screenSize: { width: number; height: number }): Promise<void> {
     try {
-      await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
-      this.currentConfig = config;
-      logger.info('Region config saved', { 
-        regionCount: regions.length,
-        resolution: screenResolution 
+      const config: ScreenConfig = {
+        width: screenSize.width,
+        height: screenSize.height,
+        regions
+      };
+      
+      const configPath = this.getConfigPath();
+      await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2));
+      
+      logger.info('Saved region configuration', { 
+        path: configPath, 
+        screenSize, 
+        regionCount: regions.length 
       });
     } catch (error) {
-      logger.error('Error saving region config', { error });
+      logger.error('Failed to save region configuration', { error });
       throw error;
     }
   }
-
+  
   /**
-   * Get current regions if available and compatible with current screen resolution
+   * Load region configuration
+   * @returns Promise resolving to loaded configuration
    */
-  async getCurrentRegions(currentResolution: { width: number; height: number }): Promise<CardRegion[] | null> {
-    if (!this.currentConfig) {
-      await this.loadConfig();
-    }
-
-    if (!this.currentConfig) {
-      return null;
-    }
-
-    // Check if resolution matches (allow small differences for taskbar, etc.)
-    const resolutionMatch = 
-      Math.abs(this.currentConfig.screenResolution.width - currentResolution.width) <= 50 &&
-      Math.abs(this.currentConfig.screenResolution.height - currentResolution.height) <= 50;
-
-    if (!resolutionMatch) {
-      logger.warn('Screen resolution changed, regions may need reconfiguration', {
-        saved: this.currentConfig.screenResolution,
-        current: currentResolution
+  async loadConfig(): Promise<ScreenConfig | null> {
+    try {
+      const configPath = this.getConfigPath();
+      
+      if (!fs.existsSync(configPath)) {
+        logger.info('No region configuration found', { path: configPath });
+        return null;
+      }
+      
+      const configData = await fs.promises.readFile(configPath, 'utf8');
+      const config = JSON.parse(configData) as ScreenConfig;
+      
+      logger.info('Loaded region configuration', { 
+        path: configPath, 
+        screenSize: { width: config.width, height: config.height },
+        regionCount: config.regions.length 
       });
+      
+      return config;
+    } catch (error) {
+      logger.error('Failed to load region configuration', { error });
       return null;
     }
-
-    return this.currentConfig.regions;
   }
-
+  
   /**
-   * Check if regions are configured and valid
-   */
-  async hasValidRegions(currentResolution: { width: number; height: number }): Promise<boolean> {
-    const regions = await this.getCurrentRegions(currentResolution);
-    return regions !== null && regions.length === 3;
-  }
-
-  /**
-   * Clear saved regions
+   * Clear region configuration
    */
   async clearConfig(): Promise<void> {
     try {
-      await fs.unlink(this.configPath);
-      this.currentConfig = null;
-      logger.info('Region config cleared');
-    } catch (error) {
-      if ((error as any).code !== 'ENOENT') {
-        logger.error('Error clearing region config', { error });
-        throw error;
+      const configPath = this.getConfigPath();
+      
+      if (fs.existsSync(configPath)) {
+        await fs.promises.unlink(configPath);
+        logger.info('Cleared region configuration', { path: configPath });
+      } else {
+        logger.info('No region configuration to clear', { path: configPath });
       }
+    } catch (error) {
+      logger.error('Failed to clear region configuration', { error });
+      throw error;
     }
   }
-
+  
   /**
-   * Get config file path for debugging
+   * Check if valid regions exist for the current screen size
+   * @param screenSize Current screen size
    */
-  getConfigPath(): string {
-    return this.configPath;
+  async hasValidRegions(screenSize: { width: number; height: number }): Promise<boolean> {
+    try {
+      const config = await this.loadConfig();
+      
+      if (!config) {
+        return false;
+      }
+      
+      // Check if screen size matches
+      if (config.width !== screenSize.width || config.height !== screenSize.height) {
+        logger.info('Region configuration exists but screen size does not match', { 
+          configSize: { width: config.width, height: config.height },
+          currentSize: screenSize
+        });
+        return false;
+      }
+      
+      // Check if we have exactly 3 regions
+      if (config.regions.length !== 3) {
+        logger.info('Region configuration exists but does not have exactly 3 regions', { 
+          regionCount: config.regions.length 
+        });
+        return false;
+      }
+      
+      // Check if all regions are valid
+      const allValid = config.regions.every(region => 
+        region.x >= 0 && region.y >= 0 &&
+        region.width > 0 && region.height > 0 &&
+        region.x + region.width <= screenSize.width &&
+        region.y + region.height <= screenSize.height
+      );
+      
+      if (!allValid) {
+        logger.info('Region configuration exists but contains invalid regions');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      logger.error('Error checking for valid regions', { error });
+      return false;
+    }
   }
-} 
+  
+  /**
+   * Get regions for the current screen size
+   * @param screenSize Current screen size
+   */
+  async getCurrentRegions(screenSize: { width: number; height: number }): Promise<CardRegion[] | null> {
+    try {
+      const config = await this.loadConfig();
+      
+      if (!config) {
+        return null;
+      }
+      
+      // Check if screen size matches
+      if (config.width !== screenSize.width || config.height !== screenSize.height) {
+        logger.info('Region configuration exists but screen size does not match', { 
+          configSize: { width: config.width, height: config.height },
+          currentSize: screenSize
+        });
+        return null;
+      }
+      
+      return config.regions;
+    } catch (error) {
+      logger.error('Error getting current regions', { error });
+      return null;
+    }
+  }
+}
+
+export default RegionConfigService;

@@ -160,5 +160,584 @@
       "updated": "2025-07-01T04:07:35.033Z",
       "description": "Expanded tasks with detailed subtasks for the visual detection MVP"
     }
+  },
+  "fast-hash-vision": {
+    "tasks": [
+      {
+        "id": 2,
+        "title": "Integrate Electron Desktop Capture",
+        "description": "Set up the Electron desktopCapturer API integration to capture the game screen and detect the Hearthstone window.",
+        "details": "Implement a module that uses Electron's desktopCapturer API to list available screens/windows. Filter the list to detect the Hearthstone window and initialize basic capture functionality. Use pseudocode: \n\nconst { desktopCapturer } = require('electron');\nasync function captureScreen() {\n  const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });\n  // Filter sources for Hearthstone window\n}\n\nEnsure module works within the existing Electron application architecture.",
+        "testStrategy": "Manually trigger the screen capture in different environments/resolutions. Verify that the correct window is detected and captured. Write integration tests to simulate window selection.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Initialize Module and API Integration",
+            "description": "Set up a new module within the Electron application's codebase and import the desktopCapturer API.",
+            "dependencies": [],
+            "details": "Create a module file that requires Electron's desktopCapturer. Ensure Electron is properly configured to allow API usage. Include basic error handling.",
+            "status": "done",
+            "testStrategy": "Verify module loads without errors and properly initializes the desktopCapturer API by checking logs."
+          },
+          {
+            "id": 2,
+            "title": "List Available Screens and Windows",
+            "description": "Use desktopCapturer.getSources to retrieve a list of screens and window sources.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement an async function that calls desktopCapturer.getSources with types ['window', 'screen']. Log the retrieved sources for debugging.",
+            "status": "done",
+            "testStrategy": "Execute the function and ensure that it returns an array of available screens and window objects, validating against known system sources."
+          },
+          {
+            "id": 3,
+            "title": "Filter for Hearthstone Window",
+            "description": "Refine the source list to detect the Hearthstone window from the available sources.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement logic that scans through the sources for identifiers or window titles matching Hearthstone. Use string matching or regular expressions as needed.",
+            "status": "done",
+            "testStrategy": "Simulate module behavior on systems with and without the Hearthstone window, ensuring that detection is reliable."
+          },
+          {
+            "id": 4,
+            "title": "Initialize Capture Functionality and Integration",
+            "description": "Integrate the capture functionality with the existing Electron application architecture.",
+            "dependencies": [
+              3
+            ],
+            "details": "Embed the capture module into the Electron application. Ensure that the application can switch between different screens or window captures as required. Perform integration tests to confirm functionality.",
+            "status": "done",
+            "testStrategy": "Run end-to-end tests within the Electron app, verifying that the Hearthstone window is captured correctly and that the application responds appropriately to capture events."
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Implement Dynamic Region Detection",
+        "description": "Develop functionality to identify and capture specific regions where cards are displayed on the Hearthstone window across various sizes and resolutions.",
+        "details": "Build logic to compute regions of interest (ROI) based on window dimensions. Use configuration files/parameters to define expected card display areas. Pseudocode example:\n\nfunction getCardRegions(windowSize) {\n   // calculating card regions based on dimensions\n   return regions;\n}\n\nIntegrate with the desktop capture module and ensure dynamic adaptation to different resolutions.",
+        "testStrategy": "Simulate multiple window sizes and resolutions. Validate that the correct regions are computed. Use unit tests to verify the calculated ROI against expected values.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Define Configuration Parameters",
+            "description": "Identify and document configuration parameters for defining ROI areas on the Hearthstone window.",
+            "dependencies": [],
+            "details": "Research the expected card display areas across various window sizes and resolutions, then design the configuration file structure to capture these parameters.",
+            "status": "in-progress",
+            "testStrategy": "Review the configuration files to ensure they accurately represent expected ROIs and are well-documented."
+          },
+          {
+            "id": 2,
+            "title": "Develop ROI Computation Logic",
+            "description": "Implement the function to calculate regions of interest (ROI) based on dynamic window dimensions.",
+            "dependencies": [
+              1
+            ],
+            "details": "Develop the getCardRegions function that computes ROI using the configured parameters. Follow the pseudocode structure provided and consider edge cases for unusual window dimensions.",
+            "status": "pending",
+            "testStrategy": "Unit test the getCardRegions function with a range of window sizes to validate that the computed regions are correct."
+          },
+          {
+            "id": 3,
+            "title": "Integrate with Desktop Capture Module",
+            "description": "Connect the ROI computation logic with the existing desktop capture system.",
+            "dependencies": [
+              2
+            ],
+            "details": "Integrate the developed dynamic ROI function with the desktop capture module, ensuring that it works seamlessly as part of the capture workflow across different resolutions.",
+            "status": "pending",
+            "testStrategy": "Perform integration tests by capturing desktop windows and verifying that the ROI adapts correctly across various system resolutions."
+          },
+          {
+            "id": 4,
+            "title": "Testing and Adaptation for Multiple Resolutions",
+            "description": "Thoroughly test and adapt the dynamic region detection system for different window sizes and display resolutions.",
+            "dependencies": [
+              3
+            ],
+            "details": "Execute comprehensive testing in environments with varying resolutions and window sizes, and refine the ROI detection logic based on test feedback.",
+            "status": "pending",
+            "testStrategy": "Use both automated and manual testing strategies to ensure that regions are accurately detected on a range of display types, including high DPI setups."
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Develop Image Preprocessing Pipeline",
+        "description": "Create an image processing module that preprocesses captured screen regions by applying grayscale conversion, thresholding, and noise reduction to prepare images for OCR.",
+        "details": "Utilize image processing libraries (e.g., Jimp or sharp) to implement steps: convert to grayscale, apply threshold filters, and remove noise. Pseudocode:\n\nfunction preprocessImage(image) {\n  image = convertToGrayscale(image);\n  image = applyThreshold(image);\n  image = reduceNoise(image);\n  return image;\n}\n\nEnsure that the module is optimized and can handle multiple regions efficiently.",
+        "testStrategy": "Provide sample images to the preprocessing function. Verify transformed output visually and by comparing with expected processed images. Automate tests with assertions on pixel value distributions.",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Grayscale Conversion",
+            "description": "Develop a function to convert the input image to grayscale using the selected image processing library.",
+            "dependencies": [],
+            "details": "Set up and test the grayscale function with various image inputs to ensure accurate conversion. Utilize library methods from Jimp or sharp to perform the conversion.",
+            "status": "pending",
+            "testStrategy": "Compare original and grayscale images to ensure that color data is correctly transformed into intensity values without data loss."
+          },
+          {
+            "id": 2,
+            "title": "Implement Threshold Filtering",
+            "description": "Develop a function to apply threshold filtering to binarize the grayscale image.",
+            "dependencies": [
+              1
+            ],
+            "details": "Integrate a threshold filter that segments the image based on intensity levels. Adjust parameter values for optimal distinction between foreground and background.",
+            "status": "pending",
+            "testStrategy": "Use a set of test images with known threshold requirements and verify that the output matches the expected binary results."
+          },
+          {
+            "id": 3,
+            "title": "Implement Noise Reduction",
+            "description": "Develop a function to reduce noise in the thresholded image to improve OCR readiness.",
+            "dependencies": [
+              2
+            ],
+            "details": "Apply noise reduction techniques to clean up the images while preserving important edge and text details. Evaluate different noise reduction algorithms provided by the library.",
+            "status": "pending",
+            "testStrategy": "Introduce synthetic noise in test images and verify that the noise reduction function effectively minimizes noise while retaining the clarity of important features."
+          },
+          {
+            "id": 4,
+            "title": "Integrate and Optimize Image Preprocessing Pipeline",
+            "description": "Combine the grayscale conversion, threshold filtering, and noise reduction functions into a cohesive module optimized for multiple screen regions.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Integrate individual functions into the final preprocessing pipeline. Focus on optimization strategies for batch processing and ensuring efficient handling of multiple image regions.",
+            "status": "pending",
+            "testStrategy": "Conduct performance tests by processing multiple screen regions simultaneously and verify the accuracy and speed of the integrated pipeline."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Integrate Tesseract.js for OCR",
+        "description": "Set up and configure Tesseract.js within the Electron environment to perform OCR on preprocessed image regions.",
+        "details": "Integrate Tesseract.js by installing the library and configuring it for the Hearthstone font (Belwe). Update settings or perform training if necessary. Pseudocode:\n\nimport Tesseract from 'tesseract.js';\nTesseract.recognize(image, 'eng', { tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' })\n  .then(result => { /* handle OCR result */ });\n\nDocument and configure to meet the specification for card names.",
+        "testStrategy": "Test OCR integration using controlled images with known text. Validate that OCR returns expected results, and conduct performance testing for speed.",
+        "priority": "high",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Install and Set Up Tesseract.js",
+            "description": "Integrate the Tesseract.js library into the Electron environment by installing it via npm and performing initial configuration.",
+            "dependencies": [],
+            "details": "Run npm install tesseract.js, verify Electron compatibility, and ensure basic usage examples are working.",
+            "status": "pending",
+            "testStrategy": "Confirm Tesseract.js is correctly imported and initializes without errors on a sample image."
+          },
+          {
+            "id": 2,
+            "title": "Configure Tesseract.js for Hearthstone Font",
+            "description": "Customize Tesseract.js settings to optimize OCR for the Hearthstone-specific Belwe font.",
+            "dependencies": [
+              1
+            ],
+            "details": "Update OCR configuration such as tessedit_char_whitelist if necessary, and adjust training settings to better recognize Belwe characters.",
+            "status": "pending",
+            "testStrategy": "Test configurations using the provided pseudocode and ensure the OCR output matches expectations for card name characters."
+          },
+          {
+            "id": 3,
+            "title": "Integrate Preprocessed Image Regions",
+            "description": "Link the OCR engine with preprocessed image sections that contain card names.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement the connection between image preprocessing modules and Tesseract.recognize function, ensuring regions are correctly isolated.",
+            "status": "pending",
+            "testStrategy": "Use controlled images where the card name region is defined, and verify that OCR recognition accurately extracts the text."
+          },
+          {
+            "id": 4,
+            "title": "Document and Validate the Integration",
+            "description": "Prepare detailed documentation for the OCR integration and validate the component within the application.",
+            "dependencies": [
+              3
+            ],
+            "details": "Document the installation process, configuration details, dependencies, and troubleshooting steps for OCR. Run full integration tests to check OCR output consistency.",
+            "status": "pending",
+            "testStrategy": "Perform a series of integration tests using real-world Hearthstone card images and review documented results for accuracy and reliability."
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Develop OCR Text Extraction Pipeline",
+        "description": "Implement the pipeline that extracts text from preprocessed image regions using Tesseract.js and prepares the extracted text for matching.",
+        "details": "Create a pipeline that passes each ROI to the Tesseract module and collects the OCR results. Include error handling for OCR failures and partial recognitions. Pseudocode:\n\nasync function extractCardName(imageRegion) {\n  const result = await Tesseract.recognize(imageRegion, 'eng');\n  return result.data.text.trim();\n}\n\nEnsure that the extraction pipeline can handle batch processing of multiple regions.",
+        "testStrategy": "Write unit tests to simulate image regions and check if the pipeline extracts text correctly. Include tests for error cases (e.g., low quality images) and validate fallback mechanisms.",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Integrate Tesseract.js Library",
+            "description": "Set up the Tesseract.js dependency in the project and verify that it works correctly with basic image inputs.",
+            "dependencies": [],
+            "details": "Install Tesseract.js, configure module loading, and perform initial tests with sample images to ensure that Tesseract is accessible within the code base.",
+            "status": "pending",
+            "testStrategy": "Run simple OCR tasks on known images and compare the results with expected text outputs."
+          },
+          {
+            "id": 2,
+            "title": "Develop Single ROI OCR Extraction Function",
+            "description": "Implement the function that extracts text from a single image region using Tesseract.js.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create an async function (e.g., extractCardName) that accepts an image region, passes it to Tesseract.recognize, and returns the trimmed text. Include basic error handling for possible recognition issues.",
+            "status": "pending",
+            "testStrategy": "Test the function with controlled ROI inputs and verify that the text output matches the expected results."
+          },
+          {
+            "id": 3,
+            "title": "Implement Batch Processing for Multiple Image Regions",
+            "description": "Extend the OCR extraction function to handle multiple regions in a batch process.",
+            "dependencies": [
+              2
+            ],
+            "details": "Develop a wrapper function that iterates over an array of image regions, calls the single ROI extraction function for each, and collects the results. Ensure concurrent processing where appropriate.",
+            "status": "pending",
+            "testStrategy": "Run a batch of sample ROIs and ensure that all regions are processed correctly and performance benchmarks are met."
+          },
+          {
+            "id": 4,
+            "title": "Enhance Error Handling and Logging Mechanisms",
+            "description": "Integrate comprehensive error handling and logging within the OCR pipeline to manage OCR failures and partial recognitions.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Implement try-catch blocks around OCR calls, log errors and warnings for any issues during the processing, and create fallback workflows for partial recognition cases.",
+            "status": "pending",
+            "testStrategy": "Simulate erroneous and edge-case scenarios (e.g., poor image quality) to verify that errors are correctly captured and handled without crashing the pipeline."
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Implement Fuzzy Card Name Matching",
+        "description": "Design and implement a fuzzy string matching algorithm to verify OCR output against the existing card database and support multiple languages.",
+        "details": "Leverage a fuzzy matching library (like Fuse.js) to compare OCR texts with the database of card names. Configure matching thresholds and handle language-specific comparisons. Pseudocode:\n\nconst fuse = new Fuse(cardDatabase, { keys: ['name'], threshold: 0.3 });\nfunction matchCardName(ocrText) {\n   return fuse.search(ocrText);\n}\n\nDocument error handling when matches are ambiguous or not found.",
+        "testStrategy": "Create unit tests with sample OCR outputs and verify that fuzzy matching returns relevant results. Include tests for ambiguous cases and various language inputs.",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Requirements and Research Analysis",
+            "description": "Analyze the fuzzy matching requirements, review the OCR output characteristics, and compile language and card database specifications.",
+            "dependencies": [],
+            "details": "Gather detailed specifications, including multi-language support and threshold settings. Document the needed properties for the card database and investigate Fuse.js configuration options for fuzzy matching.",
+            "status": "pending",
+            "testStrategy": "Review gathered documentation and validate that all requirements are met by cross-checking with project specifications."
+          },
+          {
+            "id": 2,
+            "title": "Implement Fuzzy Matching Core Algorithm",
+            "description": "Develop the core matching function using the Fuse.js library to compare OCR text with card names.",
+            "dependencies": [
+              1
+            ],
+            "details": "Write code to set up Fuse.js with the card database. Implement matchCardName function with appropriate key configurations and threshold settings. Ensure the core matching logic is functional.",
+            "status": "pending",
+            "testStrategy": "Unit test the matchCardName function with a variety of input OCR texts and check if the correct matches are returned from the database."
+          },
+          {
+            "id": 3,
+            "title": "Integrate Multi-Language Support",
+            "description": "Enhance the fuzzy matching algorithm to handle language-specific comparisons as required by the project.",
+            "dependencies": [
+              2
+            ],
+            "details": "Configure additional settings or parameters in Fuse.js (or apply pre-processing) to account for language-specific variations. Ensure compatibility with the multi-language card database.",
+            "status": "pending",
+            "testStrategy": "Test using OCR outputs in different languages and verify that the algorithm correctly identifies matches, adjusting thresholds where necessary."
+          },
+          {
+            "id": 4,
+            "title": "Error Handling and Documentation",
+            "description": "Implement and document error handling for ambiguous or no match scenarios.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Design a clear error handling strategy for cases where fuzzy matching returns ambiguous results or no match. Update function documentation and code comments to reflect these strategies.",
+            "status": "pending",
+            "testStrategy": "Simulate scenarios with ambiguous and missing OCR matches and verify that appropriate error messages are generated. Review documentation for completeness."
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Extend CardDataService to Support Visual Data",
+        "description": "Enhance the existing CardDataService to incorporate visual detection results and integrate OCR output with card data.",
+        "details": "Modify CardDataService to include an interface for receiving visual detection input. This involves merging OCR and fuzzy matching results into the card lookup process. Pseudocode:\n\nclass CardDataService {\n  updateWithVisualData(cardData) {\n    // Merge visual detection results with existing database\n  }\n}\n\nEnsure backward compatibility with log parsing requirements.",
+        "testStrategy": "Implement integration tests to validate that CardDataService correctly processes both log and visual detection inputs. Simulate various data conditions to check consistency.",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Define Visual Data Interface Specifications",
+            "description": "Draft detailed specifications for the interface to accept visual detection input, including merging options for OCR and fuzzy matching.",
+            "dependencies": [],
+            "details": "Outline the required input data structure, protocols, and validation mechanisms to ensure smooth integration with the existing CardDataService.",
+            "status": "pending",
+            "testStrategy": "Review interface design with team members and create mock inputs to validate expected behaviors."
+          },
+          {
+            "id": 2,
+            "title": "Implement Visual Data Update Method",
+            "description": "Develop the updateWithVisualData method within CardDataService to handle incoming visual detection data.",
+            "dependencies": [
+              1
+            ],
+            "details": "Write code to integrate the visual data input ensuring it properly supplements the database update process and interfaces seamlessly with existing data handling logic.",
+            "status": "pending",
+            "testStrategy": "Unit test the new method with a variety of visual data payloads, ensuring that unexpected inputs are properly handled."
+          },
+          {
+            "id": 3,
+            "title": "Merge OCR and Fuzzy Matching Results",
+            "description": "Integrate OCR output with fuzzy matching results into the card lookup mechanism within CardDataService.",
+            "dependencies": [
+              2
+            ],
+            "details": "Develop logic to combine OCR results and fuzzy matching outputs, ensuring that the merged data enhances the accuracy of card detection and lookup.",
+            "status": "pending",
+            "testStrategy": "Perform integration tests to verify that the combined data improves lookup accuracy without compromising performance."
+          },
+          {
+            "id": 4,
+            "title": "Ensure Backward Compatibility with Log Parsing",
+            "description": "Verify that the enhanced CardDataService remains fully compatible with existing log parsing requirements.",
+            "dependencies": [
+              3
+            ],
+            "details": "Review current log parsing implementations and develop regression tests to ensure that updates to CardDataService do not break existing log analysis or monitoring workflows.",
+            "status": "pending",
+            "testStrategy": "Execute comprehensive regression testing including automated log parsing tests to confirm backward compatibility."
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Update ArenaDraftDetector for Combined Data Analysis",
+        "description": "Modify the ArenaDraftDetector module to combine results from log parsing and visual detection, providing a comprehensive view of card detection during drafts.",
+        "details": "Integrate the visual detection output from CardDataService into ArenaDraftDetector. Ensure that the module prioritizes visual data but falls back to log data if necessary. Pseudocode:\n\nclass ArenaDraftDetector {\n  detectDraft() {\n    const visualResults = cardDataService.getVisualData();\n    const logResults = this.getLogData();\n    return mergeResults(visualResults, logResults);\n  }\n}\n\nDocument the merging strategy and conflict resolution.",
+        "testStrategy": "Conduct system integration tests with both visual and log data inputs. Verify that the combined output meets accuracy and performance requirements.",
+        "priority": "medium",
+        "dependencies": [
+          8
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Integrate Visual Data from CardDataService",
+            "description": "Incorporate the visual detection output from CardDataService into the ArenaDraftDetector module.",
+            "dependencies": [],
+            "details": "Ensure the module can call cardDataService.getVisualData() and handle its output appropriately.",
+            "status": "pending",
+            "testStrategy": "Write unit tests to verify that the visual detection data is accurately retrieved and formatted."
+          },
+          {
+            "id": 2,
+            "title": "Implement Log Data Retrieval",
+            "description": "Develop the mechanism to retrieve and process log data within the ArenaDraftDetector.",
+            "dependencies": [],
+            "details": "Extend ArenaDraftDetector to include a method for obtaining log results, ensuring consistent data formatting for merging.",
+            "status": "pending",
+            "testStrategy": "Create tests to simulate log inputs and validate proper data extraction."
+          },
+          {
+            "id": 3,
+            "title": "Merge Visual and Log Data",
+            "description": "Create a merging function within ArenaDraftDetector to combine visual and log detection data.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement mergeResults that prioritizes visual data but falls back to log data when visual is insufficient. Address scenarios where data conflicts occur.",
+            "status": "pending",
+            "testStrategy": "Perform integration tests ensuring both data sources are merged correctly, verifying output when one source is absent."
+          },
+          {
+            "id": 4,
+            "title": "Document Merging Strategy and Conflict Resolution",
+            "description": "Write comprehensive documentation detailing the merging process and how conflicts between visual and log data are resolved.",
+            "dependencies": [
+              3
+            ],
+            "details": "Include pseudocode, decision points, and examples to illustrate the merging logic, emphasizing priority rules and fallback mechanisms.",
+            "status": "pending",
+            "testStrategy": "Review documentation against implementation and conduct walkthroughs with team members to ensure clarity."
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Enhance OverlayManager for Visual Detection Status",
+        "description": "Update the OverlayManager to display real-time detection status and visual feedback of the card detection process.",
+        "details": "Develop UI components within the existing Electron app to show detection status from the visual detection modules. Provide visual cues (e.g., highlighted card areas, detected card name overlays). Pseudocode:\n\nfunction updateOverlay(detectionResults) {\n   // Update UI overlays based on detection status\n}\n\nEnsure compatibility with existing UI framework and performance requirements.",
+        "testStrategy": "Perform UI testing on various screen sizes and display modes. Use automated UI testing tools to simulate detection events and verify overlay updates.",
+        "priority": "low",
+        "dependencies": [
+          9
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design UI Mockups for Real-Time Detection Visuals",
+            "description": "Develop detailed UI mockups outlining the visual feedback elements for card detection, including highlighted card areas and overlay displays.",
+            "dependencies": [],
+            "details": "Create sketches and wireframes that integrate with the existing Electron UI framework. Collaborate with UI/UX designers to ensure clarity and user-friendliness.",
+            "status": "pending",
+            "testStrategy": "Review mockups with stakeholders and conduct usability sessions to validate design concepts."
+          },
+          {
+            "id": 2,
+            "title": "Implement Overlay Update Function",
+            "description": "Develop the updateOverlay function to process detection results and update the UI components accordingly.",
+            "dependencies": [
+              1
+            ],
+            "details": "Write the function based on provided pseudocode, ensuring that it updates overlays with detection status and visual cues. Follow coding standards of the project.",
+            "status": "pending",
+            "testStrategy": "Unit test the updateOverlay function with simulated detection result inputs to verify correct UI updates."
+          },
+          {
+            "id": 3,
+            "title": "Integrate OverlayManager with Visual Detection Modules",
+            "description": "Connect the OverlayManager with real-time detection modules, ensuring that visual detection statuses are received and processed",
+            "dependencies": [
+              2
+            ],
+            "details": "Establish data flow between detection modules and the updated OverlayManager. Ensure compatibility with existing application architecture and other UI components.",
+            "status": "pending",
+            "testStrategy": "Perform integration testing with live detection data in a controlled environment to verify consistencies and proper interface interactions."
+          },
+          {
+            "id": 4,
+            "title": "Test and Optimize UI Performance and Compatibility",
+            "description": "Conduct thorough testing of the OverlayManager enhancements ensuring performance and compatibility with the existing Electron app.",
+            "dependencies": [
+              3
+            ],
+            "details": "Execute end-to-end tests focusing on performance benchmarks, rapid UI updates, and smooth operation under various scenarios. Optimize code as needed based on test findings.",
+            "status": "pending",
+            "testStrategy": "Employ performance testing tools and user acceptance tests, documenting results and addressing any identified issues."
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Optimize Performance & Error Handling",
+        "description": "Implement performance optimizations and robust error handling to ensure processing stays under 100ms and seamlessly falls back to log parsing if visual detection fails.",
+        "details": "Profile key operations within the capture, preprocessing, OCR, and matching pipelines. Introduce optimizations such as batching image processing steps and caching frequent OCR results. Implement error handlers to detect failures and call fallback procedures. Pseudocode:\n\ntry {\n   const result = await processImagePipeline(image);\n} catch (error) {\n   fallbackToLogParsing();\n}\n\nDocument benchmarks and performance targets ensuring memory usage is minimized.",
+        "testStrategy": "Conduct performance testing under simulated high-load conditions. Use profiling tools to ensure processing time remains below 100ms. Test error scenarios to validate fallback to log parsing and confirm robust handling.",
+        "priority": "high",
+        "dependencies": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Profile Key Operations",
+            "description": "Analyze and document the performance of critical components in the capture, preprocessing, OCR, and matching pipelines.",
+            "dependencies": [],
+            "details": "Use performance profiling tools to measure the execution time of each pipeline stage. Identify hotspots and potential bottlenecks.",
+            "status": "pending",
+            "testStrategy": "Compare profiling results with baseline metrics to ensure accurate identification of performance issues."
+          },
+          {
+            "id": 2,
+            "title": "Implement Processing Optimizations",
+            "description": "Introduce optimizations such as batching of image processing and caching frequently accessed OCR results to reduce processing time.",
+            "dependencies": [
+              1
+            ],
+            "details": "Refactor processing logic to allow for batching and implement caching mechanisms. Carefully integrate these changes ensuring they do not impact the existing workflow.",
+            "status": "pending",
+            "testStrategy": "Run performance tests to verify that processing time is reduced and maintained under 100ms per operation."
+          },
+          {
+            "id": 3,
+            "title": "Develop Robust Error Handling",
+            "description": "Create error handlers that detect failures in the image processing pipeline and trigger fallback procedures such as log parsing.",
+            "dependencies": [
+              1
+            ],
+            "details": "Integrate try-catch blocks around the processImagePipeline calls, ensuring that failures consistently invoke fallbackToLogParsing. Test for various failure scenarios.",
+            "status": "pending",
+            "testStrategy": "Simulate errors during image processing and confirm that the fallback method is reliably called."
+          },
+          {
+            "id": 4,
+            "title": "Benchmark and Document Performance",
+            "description": "Establish performance benchmarks and document targets, ensuring memory usage remains minimal while processing stays under 100ms.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Collect and record performance metrics after implementing optimizations and error handling. Generate comprehensive documentation detailing benchmarks, performance targets, and memory usage statistics.",
+            "status": "pending",
+            "testStrategy": "Review logs and benchmark reports to confirm that all performance and memory criteria are met."
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-07-02T05:05:47.261Z",
+      "updated": "2025-07-02T05:43:38.395Z",
+      "description": "Tasks for fast-hash-vision context"
+    }
   }
 }

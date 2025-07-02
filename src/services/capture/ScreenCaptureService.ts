@@ -1,29 +1,8 @@
-import { desktopCapturer, screen, Rectangle } from 'electron';
+import { desktopCapturer, screen, Rectangle, BrowserWindow } from 'electron';
 import logger from '../../utils/logger';
 import { EventEmitter } from 'events';
 import { RegionConfigService, CardRegion } from '../config/RegionConfigService';
-import { createCanvas, loadImage, Canvas, CanvasRenderingContext2D, ImageData } from 'canvas';
-import { app } from 'electron';
-import * as fs from 'fs';
-import * as path from 'path';
-// -------- Super-resolution (UpscalerJS) ------------
-// We lazily create a single Upscaler instance (ESRGAN-Slim 3×) the first time it is needed.
-// Use `any` typing to avoid TypeScript module resolution issues when type declarations are missing.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let upscalerInstance: any | null = null;
-async function getUpscaler(): Promise<any> {
-  if (upscalerInstance) {
-    return upscalerInstance;
-  }
-  // Dynamic import keeps initial startup lightweight – heavy tfjs libs are loaded only when required.
-  // Using "require" here because Electron main process can load CJS modules easily.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const Upscaler = require('upscaler/node');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const x3 = require('@upscalerjs/esrgan-slim/3x');
-  upscalerInstance = new Upscaler({ model: x3 });
-  return upscalerInstance as any;
-}
+import RegionDetector, { ScreenDetection } from './RegionDetector';
 
 /**
  * Interface for capture region
@@ -56,20 +35,7 @@ export interface PreprocessingOptions {
   binarize: boolean;
   scaleUp: boolean;
   scaleUpFactor: number;
-  grayscale: boolean;
-  threshold: number;
-  extractNameBanner: boolean;
 }
-
-/**
- * Maximum number of debug images to keep per region
- */
-const MAX_DEBUG_IMAGES_PER_REGION = 15;
-
-/**
- * Total maximum number of debug images across all regions
- */
-const MAX_TOTAL_DEBUG_IMAGES = 50;
 
 /**
  * ScreenCaptureService
@@ -86,16 +52,13 @@ export class ScreenCaptureService extends EventEmitter {
     sharpen: true,
     binarize: true,
     scaleUp: true,
-    scaleUpFactor: 3,
-    grayscale: true,
-    threshold: 128,
-    extractNameBanner: true
+    scaleUpFactor: 2
   };
   private regionConfigService: RegionConfigService;
+  private regionDetector: RegionDetector;
   private manualRegions: CardRegion[] | null = null;
   private screenSize: { width: number; height: number } | null = null;
-  private debugCaptureDir: string = '';
-  private debugImageCounter: Map<string, number> = new Map();
+  private screenDetection: ScreenDetection | null = null;
   
   /**
    * Creates a new ScreenCaptureService instance
@@ -103,13 +66,16 @@ export class ScreenCaptureService extends EventEmitter {
   constructor() {
     super();
     this.regionConfigService = new RegionConfigService();
+    this.regionDetector = new RegionDetector();
     this.initializeRegions();
     logger.info('ScreenCaptureService initialized');
     
     // Define default card name regions (relative to Hearthstone window)
     // These will need to be adjusted based on actual Hearthstone UI
     this.defineCardNameRegions();
-    this.initializeDebugDirectory();
+    
+    // Try to load saved screen detection
+    this.loadScreenDetection();
   }
   
   /**
@@ -211,28 +177,26 @@ export class ScreenCaptureService extends EventEmitter {
    */
   public async findHearthstoneWindow(): Promise<boolean> {
     try {
-      logger.info('Looking for Hearthstone window');
+      // Use the RegionDetector to find the Hearthstone window
+      const found = await this.regionDetector.findHearthstoneWindow();
       
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 0, height: 0 }
-      });
-      
-      // Find Hearthstone window by name
-      const hearthstoneSource = sources.find(source => 
-        source.name.includes(ScreenCaptureService.HEARTHSTONE_WINDOW_TITLE)
-      );
-      
-      if (hearthstoneSource) {
-        this.hearthstoneWindowId = hearthstoneSource.id;
-        logger.info('Hearthstone window found', { id: this.hearthstoneWindowId });
+      if (found) {
+        // If we found the window, update our window ID
+        this.hearthstoneWindowId = 'found'; // Just a placeholder, we don't need the actual ID
         
         // Try to get window bounds
         await this.updateWindowBounds();
         
         return true;
       } else {
-        logger.warn('Hearthstone window not found');
+        // If testing/development, use any available window
+        if (process.env.NODE_ENV === 'development') {
+          logger.info('Development mode: Using fallback window');
+          this.hearthstoneWindowId = 'dev-fallback';
+          await this.updateWindowBounds();
+          return true;
+        }
+        
         this.hearthstoneWindowId = null;
         this.lastWindowBounds = null;
         return false;
@@ -250,57 +214,61 @@ export class ScreenCaptureService extends EventEmitter {
    * @private
    */
   private async updateWindowBounds(): Promise<void> {
-    if (!this.hearthstoneWindowId) {
-      logger.warn('Cannot update window bounds, no Hearthstone window ID');
+    // In development mode, use a fallback window size
+    if (process.env.NODE_ENV === 'development' && !this.lastWindowBounds) {
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const width = 1024;
+      const height = 768;
+      
+      this.lastWindowBounds = {
+        x: Math.round(primaryDisplay.workArea.x + (primaryDisplay.workArea.width - width) / 2),
+        y: Math.round(primaryDisplay.workArea.y + (primaryDisplay.workArea.height - height) / 2),
+        width,
+        height
+      };
+      
+      logger.info('Using fallback window bounds in development mode', { bounds: this.lastWindowBounds });
       return;
     }
     
-    try {
-      // Get all windows
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 150, height: 150 } // Small thumbnail to get dimensions
-      });
+    // If we have a screen detection, use those bounds
+    if (this.screenDetection && this.screenDetection.screenIndex >= 0) {
+      const display = screen.getAllDisplays()[this.screenDetection.screenIndex];
       
-      // Find Hearthstone window
-      const hearthstoneSource = sources.find(source => source.id === this.hearthstoneWindowId);
-      
-      if (hearthstoneSource && hearthstoneSource.thumbnail) {
-        // Get window dimensions from thumbnail
-        const { width, height } = hearthstoneSource.thumbnail.getSize();
+      if (display) {
+        // Use the first card region as a reference for the window position
+        const cardRegion = this.screenDetection.cardRegions[0];
         
-        // Get primary display info to calculate position
-        const primaryDisplay = screen.getPrimaryDisplay();
+        // Estimate window bounds based on card region position
+        // This is a simplification - in a real implementation, we'd use more sophisticated logic
+        const width = Math.max(1024, cardRegion.x * 2 + cardRegion.width);
+        const height = Math.max(768, cardRegion.y * 2 + cardRegion.height);
         
-        // For now, assume Hearthstone is on the primary display
-        // A more sophisticated approach would determine which display the window is on
-        
-        // Create rectangle for window bounds
         this.lastWindowBounds = {
-          x: Math.round(primaryDisplay.workArea.x + (primaryDisplay.workArea.width - width) / 2),
-          y: Math.round(primaryDisplay.workArea.y + (primaryDisplay.workArea.height - height) / 2),
+          x: display.bounds.x,
+          y: display.bounds.y,
           width,
           height
         };
         
-        logger.info('Updated Hearthstone window bounds', { bounds: this.lastWindowBounds });
-      } else {
-        logger.warn('Failed to get Hearthstone window bounds');
+        logger.info('Updated Hearthstone window bounds from screen detection', { bounds: this.lastWindowBounds });
+        return;
       }
-    } catch (error) {
-      logger.error('Error updating window bounds', { error });
     }
-  }
-  
-  /**
-   * Determine if a region is using absolute screen coordinates
-   * A region is absolute if any of its coordinates is > 1.0 (indicating pixels rather than ratios)
-   * @param region Region to check
-   * @returns True when coordinates are already absolute
-   * @private
-   */
-  private isAbsoluteRegion(region: CaptureRegion): boolean {
-    return region.x > 1.0 || region.y > 1.0 || region.width > 1.0 || region.height > 1.0;
+    
+    // Fallback to using the primary display
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const width = 1024;
+    const height = 768;
+    
+    this.lastWindowBounds = {
+      x: primaryDisplay.bounds.x,
+      y: primaryDisplay.bounds.y,
+      width,
+      height
+    };
+    
+    logger.info('Using fallback window bounds', { bounds: this.lastWindowBounds });
   }
   
   /**
@@ -310,17 +278,6 @@ export class ScreenCaptureService extends EventEmitter {
    * @private
    */
   private calculateAbsoluteRegion(region: CaptureRegion): CaptureRegion {
-    // If coordinates are already absolute (>1.0), return as-is
-    if (this.isAbsoluteRegion(region)) {
-      return {
-        name: region.name,
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height
-      };
-    }
-    
     if (!this.lastWindowBounds) {
       throw new Error('Window bounds not available');
     }
@@ -343,7 +300,6 @@ export class ScreenCaptureService extends EventEmitter {
   async getCaptureRegions(): Promise<CaptureRegion[]> {
     // Try to use manual regions first
     if (this.manualRegions && this.manualRegions.length === 3) {
-      logger.debug('Using manually configured regions (absolute coordinates)');
       return this.manualRegions.map(region => ({
         x: region.x,
         y: region.y,
@@ -357,7 +313,6 @@ export class ScreenCaptureService extends EventEmitter {
     await this.initializeRegions();
     
     if (this.manualRegions && this.manualRegions.length === 3) {
-      logger.debug('Using refreshed manually configured regions (absolute coordinates)');
       return this.manualRegions.map(region => ({
         x: region.x,
         y: region.y,
@@ -366,9 +321,35 @@ export class ScreenCaptureService extends EventEmitter {
         name: `card${region.cardIndex}`
       }));
     }
+    
+    // Try to use screen detection if available
+    if (this.screenDetection && this.screenDetection.cardRegions.length === 3) {
+      return this.screenDetection.cardRegions.map((region, index) => ({
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        name: `card${index + 1}`
+      }));
+    }
+    
+    // Try to detect regions dynamically
+    const newDetection = await this.regionDetector.findScreenRegions();
+    if (newDetection && newDetection.cardRegions.length === 3) {
+      this.screenDetection = newDetection;
+      await this.regionDetector.saveTemplateSettings(newDetection);
+      
+      return newDetection.cardRegions.map((region, index) => ({
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        name: `card${index + 1}`
+      }));
+    }
 
     // Fallback to automatic detection
-    logger.warn('No manual regions available, using automatic detection (absolute coordinates)');
+    logger.warn('No regions available, using fallback automatic detection');
     return this.getAutomaticCaptureRegions();
   }
   
@@ -425,164 +406,6 @@ export class ScreenCaptureService extends EventEmitter {
   }
   
   /**
-   * Initialize the debug capture directory
-   */
-  private initializeDebugDirectory(): void {
-    try {
-      const userDataPath = app.getPath('userData');
-      this.debugCaptureDir = path.join(userDataPath, 'debug-captures');
-      
-      // Create directory if it doesn't exist
-      if (!fs.existsSync(this.debugCaptureDir)) {
-        fs.mkdirSync(this.debugCaptureDir, { recursive: true });
-        logger.debug('Created debug capture directory', { path: this.debugCaptureDir });
-      }
-      
-      // Clean up old debug captures on startup
-      this.cleanupDebugCaptures();
-    } catch (error) {
-      logger.error('Failed to initialize debug directory', { error });
-    }
-  }
-
-  /**
-   * Clean up old debug captures, keeping only the most recent MAX_TOTAL_DEBUG_IMAGES
-   */
-  private cleanupDebugCaptures(): void {
-    try {
-      if (!fs.existsSync(this.debugCaptureDir)) {
-        return;
-      }
-      
-      const files = fs.readdirSync(this.debugCaptureDir)
-        .filter(file => file.endsWith('.png'))
-        .map(file => ({
-          name: file,
-          path: path.join(this.debugCaptureDir, file),
-          time: fs.statSync(path.join(this.debugCaptureDir, file)).mtimeMs
-        }));
-      
-      // Group by region (card1, card2, card3)
-      const regionFiles: Record<string, typeof files> = {};
-      
-      for (const file of files) {
-        // Extract region name (e.g., "card1" from "card1-123456.png")
-        const regionMatch = file.name.match(/^([^-]+)-/);
-        if (regionMatch) {
-          const region = regionMatch[1];
-          if (!regionFiles[region]) {
-            regionFiles[region] = [];
-          }
-          regionFiles[region].push(file);
-        }
-      }
-      
-      // Clean up each region, keeping only MAX_DEBUG_IMAGES_PER_REGION most recent files
-      for (const region in regionFiles) {
-        const regionFileList = regionFiles[region]
-          .sort((a, b) => b.time - a.time); // Sort by time descending
-        
-        // Delete old files for this region
-        if (regionFileList.length > MAX_DEBUG_IMAGES_PER_REGION) {
-          const filesToDelete = regionFileList.slice(MAX_DEBUG_IMAGES_PER_REGION);
-          for (const file of filesToDelete) {
-            fs.unlinkSync(file.path);
-            logger.debug('Deleted old debug capture', { file: file.name });
-          }
-        }
-      }
-      
-      // Check if we still have too many total images
-      const remainingFiles = fs.readdirSync(this.debugCaptureDir)
-        .filter(file => file.endsWith('.png'))
-        .map(file => ({
-          name: file,
-          path: path.join(this.debugCaptureDir, file),
-          time: fs.statSync(path.join(this.debugCaptureDir, file)).mtimeMs
-        }))
-        .sort((a, b) => b.time - a.time); // Sort by time descending
-      
-      if (remainingFiles.length > MAX_TOTAL_DEBUG_IMAGES) {
-        const filesToDelete = remainingFiles.slice(MAX_TOTAL_DEBUG_IMAGES);
-        for (const file of filesToDelete) {
-          fs.unlinkSync(file.path);
-          logger.debug('Deleted excess debug capture', { file: file.name });
-        }
-      }
-      
-      logger.info('Cleaned up debug captures', { 
-        kept: Math.min(remainingFiles.length, MAX_TOTAL_DEBUG_IMAGES),
-        deleted: Math.max(0, files.length - MAX_TOTAL_DEBUG_IMAGES)
-      });
-    } catch (error) {
-      logger.error('Failed to cleanup debug captures', { error });
-    }
-  }
-
-  /**
-   * Save a debug capture image to disk
-   * @param region The region that was captured
-   * @param dataUrl The image data URL
-   */
-  private saveDebugCapture(region: CaptureRegion, dataUrl: string): void {
-    if (!this.debugCaptureDir) {
-      return;
-    }
-    
-    try {
-      // Increment counter for this region
-      const regionName = region.name || 'unknown';
-      const counter = (this.debugImageCounter.get(regionName) || 0) + 1;
-      this.debugImageCounter.set(regionName, counter);
-      
-      // Only save every 5th image to reduce disk usage
-      if (counter % 5 !== 0) {
-        return;
-      }
-      
-      const timestamp = Date.now();
-      const fileName = `${regionName}-${timestamp}.png`;
-      const filePath = path.join(this.debugCaptureDir, fileName);
-      
-      // Convert data URL to buffer
-      const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      
-      // Write file
-      fs.writeFileSync(filePath, buffer);
-      logger.debug('Saved debug capture', { file: fileName });
-      
-      // Clean up if we have too many files
-      if (counter % 15 === 0) {
-        this.cleanupDebugCaptures();
-      }
-    } catch (error) {
-      logger.error('Failed to save debug capture', { error });
-    }
-  }
-  
-  /**
-   * Crop a thumbnail to the specified rectangle
-   * @param thumbnail The thumbnail to crop
-   * @param rect The rectangle to crop from the thumbnail
-   * @returns Data URL of the cropped thumbnail
-   */
-  private cropThumbnail(thumbnail: Electron.NativeImage, rect: Rectangle): string {
-    try {
-      // Crop the thumbnail
-      const croppedImage = thumbnail.crop(rect);
-      
-      // Convert to data URL
-      const dataUrl = croppedImage.toDataURL();
-      
-      return dataUrl;
-    } catch (error) {
-      logger.error('Error cropping thumbnail', { error, rect });
-      throw error;
-    }
-  }
-  
-  /**
    * Capture a specific region of the screen
    * @param region Region to capture
    * @returns Promise resolving to capture result
@@ -605,26 +428,22 @@ export class ScreenCaptureService extends EventEmitter {
       
       // Calculate absolute region coordinates
       const absoluteRegion = this.calculateAbsoluteRegion(region);
-
-      // Log region coordinates for debugging
-      logger.debug('Capturing region', { 
-        name: region.name,
-        original: region,
-        computed: absoluteRegion,
-        isAbsoluteCoordinates: this.isAbsoluteRegion(region)
-      });
-
-      // Get desktop capture sources
+      
+      // Capture the screen region
+      const captureRect: Rectangle = {
+        x: absoluteRegion.x,
+        y: absoluteRegion.y,
+        width: absoluteRegion.width,
+        height: absoluteRegion.height
+      };
+      
+      // Use desktopCapturer to get a screenshot
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: {
-          width: screen.getPrimaryDisplay().workAreaSize.width,
-          height: screen.getPrimaryDisplay().workAreaSize.height
-        }
+        thumbnailSize: { width: captureRect.width, height: captureRect.height }
       });
       
-      if (!sources || sources.length === 0) {
-        logger.error('No screen sources available for capture');
+      if (sources.length === 0) {
         return {
           dataUrl: '',
           region,
@@ -634,170 +453,160 @@ export class ScreenCaptureService extends EventEmitter {
         };
       }
       
-      // Find primary display source
-      const primarySource = sources.find(s => s.display_id?.toString() === screen.getPrimaryDisplay().id.toString()) || sources[0];
+      // Create a browser window to capture the specific region
+      const captureWindow = new BrowserWindow({
+        width: captureRect.width,
+        height: captureRect.height,
+        show: false,
+        webPreferences: {
+          offscreen: true
+        }
+      });
       
-      if (!primarySource || !primarySource.thumbnail) {
-        logger.error('Primary source or thumbnail not available');
-        return {
-          dataUrl: '',
-          region,
-          timestamp: Date.now(),
-          success: false,
-          error: 'Screen capture failed'
-        };
-      }
+      // Load a blank page
+      await captureWindow.loadURL('about:blank');
       
-      // Get thumbnail as data URL
-      const thumbnail = primarySource.thumbnail;
-      const rect = {
-        x: Math.floor(absoluteRegion.x),
-        y: Math.floor(absoluteRegion.y),
-        width: Math.floor(absoluteRegion.width),
-        height: Math.floor(absoluteRegion.height)
-      };
+      // Capture the region
+      const image = await captureWindow.webContents.capturePage(captureRect);
       
-      // Crop the region from the thumbnail
-      const croppedDataUrl = this.cropThumbnail(thumbnail, rect);
+      // Convert to data URL
+      const dataUrl = image.toDataURL();
       
-      // Save debug capture
-      this.saveDebugCapture(region, croppedDataUrl);
+      // Close the capture window
+      captureWindow.close();
       
-      // Return the result
+      logger.debug('Region captured successfully', { region: region.name });
+      
       return {
-        dataUrl: croppedDataUrl,
+        dataUrl,
         region,
         timestamp: Date.now(),
         success: true
       };
     } catch (error) {
-      logger.error('Error capturing region', { error, region });
+      logger.error('Error capturing region', { region: region.name, error });
+      
       return {
         dataUrl: '',
         region,
         timestamp: Date.now(),
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: `Capture failed: ${error}`
       };
     }
   }
   
   /**
-   * Preprocesses a card image by extracting just the name banner region
-   * This helps OCR focus only on the most relevant text area
-   * @param dataUrl Source image data URL
+   * Preprocess an image to improve OCR accuracy
+   * @param dataUrl Image data URL to process
    * @param options Preprocessing options
-   * @returns Processed image data URL focusing on card name area
-   * @private
-   */
-  private async preprocessCardNameBanner(dataUrl: string, options: PreprocessingOptions): Promise<string> {
-    try {
-      // Load image
-      const image = await loadImage(dataUrl);
-      
-      // Calculate name banner region (approximately 12-29% from the top of card)
-      const nameStartY = Math.round(image.height * 0.12);
-      const nameHeight = Math.round(image.height * 0.17);
-      
-      // Create canvas and get context
-      const canvas = createCanvas(image.width, nameHeight);
-      const ctx = canvas.getContext('2d');
-      
-      // Draw just the name region to the canvas
-      ctx.drawImage(image, 
-        0, nameStartY, image.width, nameHeight, // source rectangle
-        0, 0, image.width, nameHeight           // destination rectangle
-      );
-      
-      // Apply additional preprocessing
-      if (options.grayscale) {
-        this.convertToGrayscale(ctx, canvas.width, canvas.height);
-      }
-      
-      if (options.sharpen) {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        this.sharpenImage(ctx, imageData);
-      }
-      
-      if (options.threshold > 0) {
-        this.applyThreshold(ctx, canvas.width, canvas.height, options.threshold);
-      }
-      
-      // If scaleUp is requested, perform super-resolution before returning
-      let processedDataUrl = canvas.toDataURL();
-
-      if (options.scaleUp && image.width * options.scaleUpFactor < 600) {
-        try {
-          const upscaler = await getUpscaler();
-          // Convert the current canvas PNG buffer into base64, then upscale
-          const inputBuffer = Buffer.from(processedDataUrl.split(',')[1], 'base64');
-          const upscaledBase64: string = await upscaler.upscale(inputBuffer, {
-            output: 'base64'
-          });
-          processedDataUrl = `data:image/png;base64,${upscaledBase64}`;
-          logger.debug('Applied super-resolution upscaling to name banner', {
-            originalWidth: image.width,
-            upscaledDataUrlLength: processedDataUrl.length
-          });
-        } catch (srError) {
-          logger.warn('Super-resolution upscaling failed, falling back to original', { srError });
-        }
-      }
-      
-      logger.debug('Preprocessed card name banner', { 
-        originalWidth: image.width,
-        originalHeight: image.height,
-        nameBannerHeight: nameHeight,
-        nameBannerY: nameStartY
-      });
-      
-      return processedDataUrl;
-    } catch (error) {
-      logger.error('Error preprocessing card name banner', error);
-      return dataUrl; // Return original if processing fails
-    }
-  }
-
-  /**
-   * Preprocesses image for better OCR recognition
-   * @param dataUrl Source image data URL
-   * @param options Preprocessing options
-   * @returns Processed image data URL
+   * @returns Promise resolving to processed image data URL
    * @private
    */
   private async preprocessImage(dataUrl: string, options: PreprocessingOptions = this.defaultPreprocessingOptions): Promise<string> {
     try {
-      // Try optimized card name banner extraction for better OCR
-      if (options.extractNameBanner) {
-        return this.preprocessCardNameBanner(dataUrl, options);
+      // Create an image element to load the data URL
+      const img = new Image();
+      
+      // Create a promise that resolves when the image loads
+      const imageLoaded = new Promise<HTMLImageElement>((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = (err) => reject(err);
+        img.src = dataUrl;
+      });
+      
+      // Wait for the image to load
+      const loadedImg = await imageLoaded;
+      
+      // Create a canvas to process the image
+      const canvas = document.createElement('canvas');
+      
+      // Scale up if requested (helps OCR with small text)
+      let width = loadedImg.width;
+      let height = loadedImg.height;
+      
+      if (options.scaleUp) {
+        width *= options.scaleUpFactor;
+        height *= options.scaleUpFactor;
       }
       
-      // Original preprocessing pipeline if name banner extraction is disabled
-      const image = await loadImage(dataUrl);
-      const canvas = createCanvas(image.width, image.height);
+      canvas.width = width;
+      canvas.height = height;
+      
       const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
       
-      // Draw image onto canvas
-      ctx.drawImage(image, 0, 0);
+      // Draw the image on the canvas with scaling if needed
+      ctx.drawImage(loadedImg, 0, 0, width, height);
       
-      // Apply preprocessing steps
-      if (options.grayscale) {
-        this.convertToGrayscale(ctx, canvas.width, canvas.height);
+      // Get image data for processing
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      
+      // Apply image processing
+      if (options.enhanceContrast) {
+        this.enhanceContrast(data);
       }
       
       if (options.sharpen) {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         this.sharpenImage(ctx, imageData);
       }
       
-      if (options.threshold > 0) {
-        this.applyThreshold(ctx, canvas.width, canvas.height, options.threshold);
+      if (options.binarize) {
+        this.binarizeImage(data);
       }
       
-      return canvas.toDataURL();
+      // Put the processed image data back on the canvas
+      ctx.putImageData(imageData, 0, 0);
+      
+      // Convert the canvas back to a data URL
+      const processedDataUrl = canvas.toDataURL('image/png');
+      
+      logger.debug('Image preprocessed successfully');
+      return processedDataUrl;
     } catch (error) {
-      logger.error('Error preprocessing image', error);
+      logger.error('Error preprocessing image', { error });
+      // Return original image if processing fails
       return dataUrl;
+    }
+  }
+  
+  /**
+   * Enhance contrast in an image
+   * @param data Image data array
+   * @private
+   */
+  private enhanceContrast(data: Uint8ClampedArray): void {
+    // Find min and max values for auto-contrast
+    let min = 255;
+    let max = 0;
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Convert to grayscale using luminance formula
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      
+      if (gray < min) min = gray;
+      if (gray > max) max = gray;
+    }
+    
+    // Skip if there's no range to adjust
+    if (min === max) return;
+    
+    // Apply contrast stretching
+    const range = max - min;
+    for (let i = 0; i < data.length; i += 4) {
+      for (let j = 0; j < 3; j++) {
+        // Stretch each color channel
+        data[i + j] = Math.min(255, Math.max(0, 
+          Math.round(((data[i + j] - min) / range) * 255)
+        ));
+      }
     }
   }
   
@@ -809,7 +618,9 @@ export class ScreenCaptureService extends EventEmitter {
    */
   private sharpenImage(ctx: CanvasRenderingContext2D, imageData: ImageData): void {
     // Create a temporary canvas for the sharpening operation
-    const tempCanvas = createCanvas(imageData.width, imageData.height);
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imageData.width;
+    tempCanvas.height = imageData.height;
     const tempCtx = tempCanvas.getContext('2d');
     
     if (!tempCtx) {
@@ -822,10 +633,10 @@ export class ScreenCaptureService extends EventEmitter {
     
     // Apply a sharpening filter using a convolution
     ctx.save();
-    ctx.drawImage(tempCanvas as unknown as Canvas, 0, 0);
+    ctx.drawImage(tempCanvas, 0, 0);
     ctx.globalAlpha = 0.5; // Adjust strength of sharpening
     ctx.globalCompositeOperation = 'overlay';
-    ctx.drawImage(tempCanvas as unknown as Canvas, 0, 0);
+    ctx.drawImage(tempCanvas, 0, 0);
     ctx.restore();
     
     // Get the sharpened image data
@@ -835,6 +646,92 @@ export class ScreenCaptureService extends EventEmitter {
     for (let i = 0; i < imageData.data.length; i++) {
       imageData.data[i] = sharpenedData.data[i];
     }
+  }
+  
+  /**
+   * Binarize an image (convert to black and white)
+   * @param data Image data array
+   * @private
+   */
+  private binarizeImage(data: Uint8ClampedArray): void {
+    // Use Otsu's method to find optimal threshold
+    const threshold = this.calculateOtsuThreshold(data);
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Convert to grayscale using luminance formula
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      
+      // Apply threshold
+      const value = gray < threshold ? 0 : 255;
+      
+      // Set RGB channels to the same value (black or white)
+      data[i] = value;     // R
+      data[i + 1] = value; // G
+      data[i + 2] = value; // B
+      // Alpha channel remains unchanged
+    }
+  }
+  
+  /**
+   * Calculate optimal threshold using Otsu's method
+   * @param data Image data array
+   * @returns Optimal threshold value
+   * @private
+   */
+  private calculateOtsuThreshold(data: Uint8ClampedArray): number {
+    // Create histogram
+    const histogram = new Array(256).fill(0);
+    let pixelCount = 0;
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Convert to grayscale
+      const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      histogram[gray]++;
+      pixelCount++;
+    }
+    
+    // Calculate sum and mean
+    let sum = 0;
+    for (let i = 0; i < 256; i++) {
+      sum += i * histogram[i];
+    }
+    
+    let sumB = 0;
+    let wB = 0;
+    let wF = 0;
+    let maxVariance = 0;
+    let threshold = 0;
+    
+    for (let t = 0; t < 256; t++) {
+      wB += histogram[t];
+      if (wB === 0) continue;
+      
+      wF = pixelCount - wB;
+      if (wF === 0) break;
+      
+      sumB += t * histogram[t];
+      
+      const mB = sumB / wB;
+      const mF = (sum - sumB) / wF;
+      
+      // Calculate between-class variance
+      const variance = wB * wF * (mB - mF) * (mB - mF);
+      
+      if (variance > maxVariance) {
+        maxVariance = variance;
+        threshold = t;
+      }
+    }
+    
+    return threshold;
   }
   
   /**
@@ -857,21 +754,9 @@ export class ScreenCaptureService extends EventEmitter {
       
       const results: CaptureResult[] = [];
       
-      // Get the appropriate regions based on current configuration (manual or automatic)
-      const regions = await this.getCaptureRegions();
-      logger.info(`Capturing ${regions.length} card regions`, {
-        regionCount: regions.length,
-        regionNames: regions.map(r => r.name)
-      });
-      
-      // Capture each region
-      for (const region of regions) {
+      // Capture each defined region
+      for (const region of this.cardNameRegions) {
         try {
-          logger.debug(`Capturing region: ${region.name}`, {
-            x: region.x, y: region.y, width: region.width, height: region.height,
-            isAbsolute: this.isAbsoluteRegion(region)
-          });
-          
           const result = await this.captureRegion(region);
           
           if (result.success && result.dataUrl) {
@@ -914,51 +799,81 @@ export class ScreenCaptureService extends EventEmitter {
   getRegionConfigService(): RegionConfigService {
     return this.regionConfigService;
   }
-
+  
   /**
-   * Convert image to grayscale
-   * @param ctx Canvas context
-   * @param width Image width
-   * @param height Image height
-   * @private
+   * Load saved screen detection
    */
-  private convertToGrayscale(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      data[i] = avg;     // R
-      data[i + 1] = avg; // G
-      data[i + 2] = avg; // B
+  private async loadScreenDetection(): Promise<void> {
+    try {
+      const detection = await this.regionDetector.loadTemplateSettings();
+      if (detection) {
+        this.screenDetection = detection;
+        logger.info('Loaded saved screen detection');
+      } else {
+        logger.info('No saved screen detection found');
+      }
+    } catch (error) {
+      logger.error('Error loading screen detection', { error });
     }
-    
-    ctx.putImageData(imageData, 0, 0);
   }
   
   /**
-   * Apply threshold to image (convert to black and white)
-   * @param ctx Canvas context
-   * @param width Image width
-   * @param height Image height
-   * @param threshold Threshold value (0-255)
-   * @private
+   * Detect card regions dynamically
+   * This will attempt to find the card regions using template matching
+   * @returns Promise resolving to true if regions were found, false otherwise
    */
-  private applyThreshold(ctx: CanvasRenderingContext2D, width: number, height: number, threshold: number): void {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      // Convert to black or white based on threshold
-      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      const val = avg < threshold ? 0 : 255;
-      
-      data[i] = val;     // R
-      data[i + 1] = val; // G
-      data[i + 2] = val; // B
+  public async detectCardRegions(): Promise<boolean> {
+    try {
+      const detection = await this.regionDetector.findScreenRegions();
+      if (detection && detection.cardRegions.length === 3) {
+        this.screenDetection = detection;
+        await this.regionDetector.saveTemplateSettings(detection);
+        logger.info('Card regions detected dynamically');
+        return true;
+      } else {
+        logger.warn('Failed to detect card regions dynamically');
+        return false;
+      }
+    } catch (error) {
+      logger.error('Error detecting card regions', { error });
+      return false;
+    }
+  }
+  
+  /**
+   * Get mana crystal regions
+   * @returns Array of mana crystal regions
+   */
+  public getManaRegions(): CaptureRegion[] {
+    if (this.screenDetection && this.screenDetection.manaRegions.length === 3) {
+      return this.screenDetection.manaRegions.map((region, index) => ({
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        name: `mana${index + 1}`
+      }));
     }
     
-    ctx.putImageData(imageData, 0, 0);
+    return [];
+  }
+  
+  /**
+   * Get rarity gem regions
+   * @returns Array of rarity gem regions
+   */
+  public getRarityRegions(): CaptureRegion[] {
+    if (this.screenDetection && this.screenDetection.rarityRegions.length === 3) {
+      return this.screenDetection.rarityRegions.map((region, index) => ({
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        name: `rarity${index + 1}`
+      }));
+    }
+    
+    return [];
   }
 }
 

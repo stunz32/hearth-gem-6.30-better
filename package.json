@@ -1,17 +1,15 @@
 {
   "name": "hearth-gem",
-  "version": "0.1.0",
-  "description": "HearthGem Arena Assistant - A tool for Hearthstone Arena drafts",
+  "version": "6.30.0",
+  "description": "Hearthstone Arena draft assistant with Fast-Hash Vision Module",
   "main": "dist/main.js",
   "scripts": {
-    "start": "electron-forge start",
-    "dev": "tsc -w & electron .",
-    "build": "tsc && node scripts/copy-assets.js",
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "tsc",
     "watch": "tsc -w",
-    "lint": "eslint --ext .ts,.tsx .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "test-ocr": "npx ts-node scripts/batch-ocr-test.ts"
+    "lint": "eslint . --ext .ts",
+    "generate-hashes": "ts-node src/utils/build-card-hashes.ts"
   },
   "repository": {
     "type": "git",
@@ -20,60 +18,32 @@
   "keywords": [
     "hearthstone",
     "arena",
+    "draft",
     "assistant",
-    "overlay",
-    "electron"
+    "vision",
+    "perceptual-hash"
   ],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "canvas": "^3.1.2",
-    "chokidar": "^3.5.3",
-    "electron-log": "^4.4.8",
-    "minimist": "^1.2.8",
-    "sharp": "^0.34.2",
-    "string-similarity": "^4.0.4",
-    "tesseract.js": "^6.0.1",
-    "winston": "^3.8.2",
-    "yargs": "^18.0.0",
-    "upscaler": "^1.0.0-beta.19",
-    "@upscalerjs/esrgan-slim": "^1.0.0-beta.12"
+    "axios": "^1.6.2",
+    "electron": "^28.0.0",
+    "image-hash": "^5.3.2",
+    "pngjs": "^7.0.0",
+    "pixelmatch": "^5.3.0",
+    "sharp": "^0.33.0",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
-    "@types/minimist": "^1.2.5",
-    "@types/node": "^18.15.11",
-    "@types/string-similarity": "^4.0.2",
-    "@types/yargs": "^17.0.33",
-    "@typescript-eslint/eslint-plugin": "^5.57.1",
-    "@typescript-eslint/parser": "^5.57.1",
-    "electron": "^24.1.2",
-    "electron-builder": "^23.6.0",
-    "eslint": "^8.38.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.0.4"
-  },
-  "build": {
-    "appId": "com.yourusername.hearthgem",
-    "productName": "HearthGem Arena Assistant",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "dist/**/*",
-      "src/index.html",
-      "package.json"
-    ],
-    "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
-    },
-    "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns"
-    },
-    "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
-    }
+    "@types/image-hash": "^4.0.4",
+    "@types/node": "^20.10.4",
+    "@types/pngjs": "^6.0.4",
+    "@types/pixelmatch": "^5.2.6",
+    "@types/sharp": "^0.32.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "eslint": "^8.55.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.3"
   }
 }

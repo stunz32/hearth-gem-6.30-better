@@ -1,73 +1,67 @@
-# HearthGem Arena Assistant
+# HearthGem with Fast-Hash Vision Module
 
-HearthGem is a powerful assistant tool for Hearthstone Arena drafts. It helps players make better card choices by providing real-time card ratings and suggestions during the draft process.
+HearthGem is an Electron-based application that assists with Hearthstone Arena drafts by automatically detecting cards on the screen. This version includes the new Fast-Hash Vision Module, which provides lightweight card detection using perceptual hashing instead of heavy computer vision libraries like OpenCV.
 
 ## Features
 
-- **Real-time Log Monitoring**: Automatically detects when you're in an Arena draft
-- **Card Ratings**: Displays card ratings to help you make better choices
-- **Transparent Overlay**: Non-intrusive overlay that shows information without blocking the game
-- **Automatic Detection**: No manual input required - just start drafting!
+- **Fast-Hash Vision Module**: Lightweight card detection using perceptual hashing
+- **Region Detection**: Automatically detects card regions in the Hearthstone window
+- **Template Matching**: Matches card templates (mana crystals, rarity gems) to identify cards
+- **Card Image Matching**: Uses perceptual hashing to match card images
+- **Real-time Detection**: Continuously monitors the Hearthstone window for cards
+
+## Components
+
+### Vision Services
+
+- **ImageMatcherService**: Matches card images using perceptual hashing
+- **TemplateMatcherService**: Matches card templates (mana crystals, rarity gems)
+
+### Capture Services
+
+- **RegionDetector**: Detects card regions in the Hearthstone window
+- **ScreenCaptureService**: Captures screenshots of the Hearthstone window
+
+### Draft Services
+
+- **VisualDraftDetector**: Detects cards in the Hearthstone draft using computer vision
+
+### Configuration Services
+
+- **RegionConfigService**: Manages configuration for card regions
+
+### Utilities
+
+- **build-card-hashes.ts**: Downloads card images and generates perceptual hashes
 
 ## Installation
 
-1. Download the latest release from the [Releases](https://github.com/yourusername/hearth-gem/releases) page
-2. Extract the zip file to a location of your choice
-3. Run the HearthGem executable
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Build the application: `npm run build`
+4. Start the application: `npm start`
 
 ## Development
 
-### Prerequisites
+- Run in development mode: `npm run dev`
+- Watch TypeScript files: `npm run watch`
+- Generate card hashes: `npm run generate-hashes`
 
-- Node.js (v14 or higher)
-- npm or yarn
-- TypeScript
+## How It Works
 
-### Setup
+1. The application detects the Hearthstone window
+2. It identifies card regions in the window using template matching
+3. It captures screenshots of these regions
+4. It uses perceptual hashing to match the captured images against known card images
+5. It verifies the matches using template matching on mana crystals and rarity gems
+6. It displays the detected cards in the user interface
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/hearth-gem.git
-   cd hearth-gem
-   ```
+## Requirements
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
-
-3. Build the project:
-   ```
-   npm run build
-   ```
-
-4. Start the application:
-   ```
-   npm start
-   ```
-
-### Project Structure
-
-- `src/` - Source code
-  - `core/` - Core application logic
-  - `services/` - Service modules
-    - `logReader/` - Hearthstone log reading functionality
-    - `cardData/` - Card database and scoring
-    - `overlay/` - Overlay UI management
-  - `utils/` - Utility functions and helpers
-  - `main.ts` - Main process entry point
-  - `renderer.ts` - Renderer process logic
-  - `index.html` - Main HTML template
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- Node.js 16+
+- Electron 28+
+- Hearthstone client
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Hearthstone is a registered trademark of Blizzard Entertainment
-- This tool is not affiliated with or endorsed by Blizzard Entertainment
+MIT

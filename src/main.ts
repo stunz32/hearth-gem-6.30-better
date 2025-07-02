@@ -2,6 +2,15 @@ import { app } from 'electron';
 import HearthGemApp from './HearthGemApp';
 import logger from './utils/logger';
 
+// Mock desktopCapturer to prevent Windows capture crashes
+const electron = require('electron');
+if (electron.desktopCapturer) {
+  electron.desktopCapturer.getSources = async () => {
+    logger.warn('desktopCapturer.getSources() blocked to prevent crash');
+    return [];
+  };
+}
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception', { error });

@@ -62,6 +62,40 @@ export class VisualDraftDetector extends EventEmitter {
    * @param intervalMs Optional interval in milliseconds
    */
   public startDetection(intervalMs?: number): void {
+    // Test if screen capture is available before starting detection
+    this.testScreenCapture().then(isAvailable => {
+      if (!isAvailable) {
+        logger.warn('Screen capture not available, detection disabled until capture is fixed');
+        return;
+      }
+      
+      this.startDetectionInternal(intervalMs);
+    }).catch(error => {
+      logger.error('Error testing screen capture, detection disabled', { error });
+    });
+  }
+  
+  /**
+   * Test if screen capture is available
+   */
+  private async testScreenCapture(): Promise<boolean> {
+    try {
+      const testSources = await (await import('electron')).desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1, height: 1 }
+      });
+      
+      return testSources.length > 0;
+    } catch (error) {
+      logger.debug('Screen capture test failed', { error });
+      return false;
+    }
+  }
+  
+  /**
+   * Internal method to actually start detection
+   */
+  private startDetectionInternal(intervalMs?: number): void {
     if (this.detectionInterval) {
       this.stopDetection();
     }
@@ -97,7 +131,32 @@ export class VisualDraftDetector extends EventEmitter {
    * @returns Promise resolving to detection result
    */
   public async detectCards(): Promise<DraftDetectionResult> {
-    // Skip if detection is already in progress
+    // Safety check: if Windows is blocking capture, skip detection to prevent crash
+    try {
+      const testSources = await (await import('electron')).desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1, height: 1 }
+      });
+      
+      if (testSources.length === 0) {
+        logger.warn('Skipping card detection - screen capture not available');
+        return {
+          cards: [],
+          timestamp: Date.now(),
+          success: false,
+          error: 'Screen capture not available'
+        };
+      }
+    } catch (captureError) {
+      logger.warn('Skipping card detection - capture blocked by system', { error: captureError });
+      return {
+        cards: [],
+        timestamp: Date.now(),
+        success: false,
+        error: 'Screen capture blocked by system'
+      };
+    }
+    
     if (this.detectionInProgress) {
       logger.debug('Card detection already in progress, skipping');
       return {

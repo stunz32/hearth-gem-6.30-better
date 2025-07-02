@@ -1,8 +1,9 @@
-import { desktopCapturer, screen, Rectangle, BrowserWindow } from 'electron';
+import { desktopCapturer, screen, Rectangle } from 'electron';
 import logger from '../../utils/logger';
 import { EventEmitter } from 'events';
 import { RegionConfigService, CardRegion } from '../config/RegionConfigService';
 import RegionDetector, { ScreenDetection } from './RegionDetector';
+import sharp from 'sharp';
 
 /**
  * Interface for capture region
@@ -282,14 +283,34 @@ export class ScreenCaptureService extends EventEmitter {
       throw new Error('Window bounds not available');
     }
     
-    // Convert relative coordinates to absolute
-    const absoluteRegion: CaptureRegion = {
+    // Determine if the region is expressed as relative (0-1) or absolute pixels.
+    const isRelative =
+      region.x > 0 && region.x < 1 &&
+      region.y > 0 && region.y < 1 &&
+      region.width  > 0 && region.width  <= 1 &&
+      region.height > 0 && region.height <= 1;
+
+    let absoluteRegion: CaptureRegion;
+
+    if (isRelative) {
+      // Convert relative coordinates to absolute pixels
+      absoluteRegion = {
       name: region.name,
-      x: Math.round(this.lastWindowBounds.x + this.lastWindowBounds.width * region.x),
+        x: Math.round(this.lastWindowBounds.x + this.lastWindowBounds.width  * region.x),
       y: Math.round(this.lastWindowBounds.y + this.lastWindowBounds.height * region.y),
-      width: Math.round(this.lastWindowBounds.width * region.width),
+        width:  Math.round(this.lastWindowBounds.width  * region.width),
       height: Math.round(this.lastWindowBounds.height * region.height)
     };
+    } else {
+      // Already absolute; just offset by window origin
+      absoluteRegion = {
+        name: region.name,
+        x: Math.round(this.lastWindowBounds.x + region.x),
+        y: Math.round(this.lastWindowBounds.y + region.y),
+        width:  Math.round(region.width),
+        height: Math.round(region.height)
+      };
+    }
     
     return absoluteRegion;
   }
@@ -298,59 +319,21 @@ export class ScreenCaptureService extends EventEmitter {
    * Get capture regions for card detection
    */
   async getCaptureRegions(): Promise<CaptureRegion[]> {
-    // Try to use manual regions first
-    if (this.manualRegions && this.manualRegions.length === 3) {
-      return this.manualRegions.map(region => ({
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height,
-        name: `card${region.cardIndex}`
-      }));
-    }
-
-    // Refresh manual regions in case they were updated
-    await this.initializeRegions();
+    // Completely disable automatic capture to prevent Windows capture crashes
+    logger.info('Automatic capture disabled - using saved settings only');
     
-    if (this.manualRegions && this.manualRegions.length === 3) {
-      return this.manualRegions.map(region => ({
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height,
-        name: `card${region.cardIndex}`
-      }));
-    }
-    
-    // Try to use screen detection if available
     if (this.screenDetection && this.screenDetection.cardRegions.length === 3) {
       return this.screenDetection.cardRegions.map((region, index) => ({
         x: region.x,
-        y: region.y,
+        y: region.y, 
         width: region.width,
         height: region.height,
         name: `card${index + 1}`
       }));
     }
     
-    // Try to detect regions dynamically
-    const newDetection = await this.regionDetector.findScreenRegions();
-    if (newDetection && newDetection.cardRegions.length === 3) {
-      this.screenDetection = newDetection;
-      await this.regionDetector.saveTemplateSettings(newDetection);
-      
-      return newDetection.cardRegions.map((region, index) => ({
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: region.height,
-        name: `card${index + 1}`
-      }));
-    }
-
-    // Fallback to automatic detection
-    logger.warn('No regions available, using fallback automatic detection');
-    return this.getAutomaticCaptureRegions();
+    logger.warn('No saved screen detection available');
+    return [];
   }
   
   /**
@@ -411,6 +394,8 @@ export class ScreenCaptureService extends EventEmitter {
    * @returns Promise resolving to capture result
    */
   public async captureRegion(region: CaptureRegion): Promise<CaptureResult> {
+    logger.debug('=== captureRegion called ===', { regionName: region.name, region });
+    
     try {
       // Find Hearthstone window if not already found
       if (!this.hearthstoneWindowId || !this.lastWindowBounds) {
@@ -429,21 +414,59 @@ export class ScreenCaptureService extends EventEmitter {
       // Calculate absolute region coordinates
       const absoluteRegion = this.calculateAbsoluteRegion(region);
       
-      // Capture the screen region
-      const captureRect: Rectangle = {
-        x: absoluteRegion.x,
-        y: absoluteRegion.y,
-        width: absoluteRegion.width,
-        height: absoluteRegion.height
-      };
-      
-      // Use desktopCapturer to get a screenshot
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: captureRect.width, height: captureRect.height }
+      // Debug log and safety guard before attempting capture
+      logger.debug('Capture rect about to be used', {
+        regionName: region.name,
+        captureRect: absoluteRegion
       });
+
+      // Safety guard – prevent Skia fatal allocation on absurd sizes
+      const MAX_DIMENSION = 4096; // Anything larger is certainly wrong
+      if (
+        absoluteRegion.width  > MAX_DIMENSION ||
+        absoluteRegion.height > MAX_DIMENSION ||
+        absoluteRegion.width  <= 0 ||
+        absoluteRegion.height <= 0
+      ) {
+        logger.error('Aborting capture – invalid rect', { captureRect: absoluteRegion });
+        return {
+          dataUrl: '',
+          region,
+          timestamp: Date.now(),
+          success: false,
+          error: 'Invalid capture size'
+        };
+      }
       
+      // Capture *entire* screen at display resolution, then crop with sharp.
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const screenWidth  = primaryDisplay.size.width;
+      const screenHeight = primaryDisplay.size.height;
+
+      let sources: Electron.DesktopCapturerSource[] = [];
+      
+      try {
+        logger.debug('Requesting screen capture via desktopCapturer', { screenWidth, screenHeight });
+        
+        sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: screenWidth, height: screenHeight }
+        });
+        
+        logger.debug('Successfully got screen sources', { count: sources.length });
+      } catch (captureError) {
+        logger.error('Screen capture failed in captureRegion', { error: captureError });
+        return {
+          dataUrl: '',
+          region,
+          timestamp: Date.now(),
+          success: false,
+          error: `Screen capture blocked: ${captureError}`
+        };
+      }
+
       if (sources.length === 0) {
+        logger.warn('No screen sources returned by desktopCapturer');
         return {
           dataUrl: '',
           region,
@@ -452,31 +475,41 @@ export class ScreenCaptureService extends EventEmitter {
           error: 'No screen sources available'
         };
       }
-      
-      // Create a browser window to capture the specific region
-      const captureWindow = new BrowserWindow({
-        width: captureRect.width,
-        height: captureRect.height,
-        show: false,
-        webPreferences: {
-          offscreen: true
-        }
-      });
-      
-      // Load a blank page
-      await captureWindow.loadURL('about:blank');
-      
-      // Capture the region
-      const image = await captureWindow.webContents.capturePage(captureRect);
-      
-      // Convert to data URL
-      const dataUrl = image.toDataURL();
-      
-      // Close the capture window
-      captureWindow.close();
-      
-      logger.debug('Region captured successfully', { region: region.name });
-      
+
+      const screenImage = sources[0].thumbnail;
+
+      // Convert NativeImage -> Buffer (PNG) then crop
+      const screenBuffer = screenImage.toPNG();
+
+      // Calculate crop offsets relative to the display
+      const cropLeft = absoluteRegion.x - primaryDisplay.bounds.x;
+      const cropTop  = absoluteRegion.y - primaryDisplay.bounds.y;
+
+      // Ensure crop region is within bounds
+      if (
+        cropLeft < 0 || cropTop < 0 ||
+        cropLeft + absoluteRegion.width  > screenWidth ||
+        cropTop  + absoluteRegion.height > screenHeight
+      ) {
+        logger.error('Crop region out of screen bounds', { cropLeft, cropTop, captureRect: absoluteRegion, screenWidth, screenHeight });
+        return {
+          dataUrl: '',
+          region,
+          timestamp: Date.now(),
+          success: false,
+          error: 'Crop region out of bounds'
+        };
+      }
+
+      const croppedBuffer = await sharp(screenBuffer)
+        .extract({ left: cropLeft, top: cropTop, width: absoluteRegion.width, height: absoluteRegion.height })
+        .png()
+        .toBuffer();
+
+      const dataUrl = 'data:image/png;base64,' + croppedBuffer.toString('base64');
+
+      logger.debug('Region captured and cropped successfully', { region: region.name });
+
       return {
         dataUrl,
         region,
@@ -823,21 +856,15 @@ export class ScreenCaptureService extends EventEmitter {
    * @returns Promise resolving to true if regions were found, false otherwise
    */
   public async detectCardRegions(): Promise<boolean> {
-    try {
-      const detection = await this.regionDetector.findScreenRegions();
-      if (detection && detection.cardRegions.length === 3) {
-        this.screenDetection = detection;
-        await this.regionDetector.saveTemplateSettings(detection);
-        logger.info('Card regions detected dynamically');
-        return true;
-      } else {
-        logger.warn('Failed to detect card regions dynamically');
-        return false;
-      }
-    } catch (error) {
-      logger.error('Error detecting card regions', { error });
-      return false;
+    // Hard stop: if we already have valid detection data, do NOT attempt screen capture
+    if (this.screenDetection?.cardRegions?.length === 3) {
+      logger.info('Using saved screen regions – skipping automatic detection');
+      return true;
     }
+
+    // Existing skip-for-now behaviour
+    logger.info('Skipping automatic card region detection to prevent capture issues');
+    return false;
   }
   
   /**

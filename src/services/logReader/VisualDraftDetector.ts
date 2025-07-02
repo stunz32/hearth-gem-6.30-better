@@ -354,17 +354,17 @@ export class VisualDraftDetector extends EventEmitter {
       timestamp: Date.now(),
       success: true
     };
-    
-    logger.info('Cards detected visually', { 
-      count: detectedCards.length,
-      cards: detectedCards.map(card => card.id)
-    });
-    
-    return {
-      cards: detectedCards,
-      timestamp: Date.now(),
-      success: true
-    };
+      
+      logger.info('Cards detected visually', { 
+        count: detectedCards.length,
+        cards: detectedCards.map(card => card.id)
+      });
+      
+      return {
+        cards: detectedCards,
+        timestamp: Date.now(),
+        success: true
+      };
   }
   
   /**
@@ -423,9 +423,9 @@ export class VisualDraftDetector extends EventEmitter {
     // Set up interval for continuous detection
     this.detectionInterval = setInterval(async () => {
       try {
-        const result = await this.detectCards();
+      const result = await this.detectCards();
         
-        if (result.success && result.cards.length > 0) {
+      if (result.success && result.cards.length > 0) {
           this.emit('cardsDetected', result.cards);
         }
       } catch (error) {

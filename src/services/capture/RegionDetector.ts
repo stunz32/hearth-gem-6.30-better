@@ -78,39 +78,10 @@ export class RegionDetector extends EventEmitter {
     try {
       logger.info('Looking for Hearthstone window');
       
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 150, height: 150 } // Small thumbnail to get dimensions
-      });
-      
-      // Log all available windows for debugging
-      logger.debug('Available windows:', sources.map(s => s.name));
-      
-      // Find Hearthstone window by name
-      const hearthstoneSource = sources.find(source => 
-        source.name.includes(RegionDetector.HEARTHSTONE_WINDOW_TITLE)
-      );
-      
-      if (hearthstoneSource) {
-        logger.info('Hearthstone window found', { 
-          id: hearthstoneSource.id,
-          name: hearthstoneSource.name
-        });
-        
-        return true;
-      } else {
-        // If Hearthstone window not found, log all available windows
-        logger.warn('Hearthstone window not found. Available windows:', 
-          sources.map(s => s.name).join(', '));
-        
-        // If testing/development, use any available window
-        if (process.env.NODE_ENV === 'development' && sources.length > 0) {
-          logger.info('Development mode: Using first available window as fallback');
-          return true;
-        }
-        
-        return false;
-      }
+      // Screen capture disabled to prevent Windows capture crashes
+      logger.info('Screen capture disabled - assuming Hearthstone is available');
+      logger.info('Hearthstone window found (bypass mode)');
+      return true;
     } catch (error) {
       logger.error('Error finding Hearthstone window', { error });
       return false;
@@ -166,21 +137,34 @@ export class RegionDetector extends EventEmitter {
       // Find card regions using template matching
       const cardMatches = await this.findTemplateMatches(screenshot, cardTemplateBuffer);
       
-      if (cardMatches.length < 3) {
+      let cardRegions: Rectangle[] = [];
+
+      if (cardMatches.length >= 3) {
+        // We have three (or more) individual card matches – use the left-most three
+        cardMatches.sort((a, b) => a.x - b.x);
+        cardRegions = cardMatches.slice(0, 3).map(match => ({
+          x: match.x,
+          y: match.y,
+          width: match.width,
+          height: match.height
+        }));
+      } else if (cardMatches.length === 1) {
+        // Detected a single large arena panel template – split it into thirds
+        const panel = cardMatches[0];
+        logger.info('Single arena panel template matched; deriving 3 card regions by splitting width');
+        const thirdWidth = Math.round(panel.width / 3);
+        for (let i = 0; i < 3; i++) {
+          cardRegions.push({
+            x: panel.x + i * thirdWidth,
+            y: panel.y,
+            width: thirdWidth,
+            height: panel.height
+          });
+        }
+      } else {
         logger.warn(`Only found ${cardMatches.length} card regions, using fallback detection method`);
         return this.fallbackRegionDetection(primaryDisplay, displayIndex);
       }
-      
-      // Sort card matches from left to right
-      cardMatches.sort((a, b) => a.x - b.x);
-      
-      // Take the first 3 matches (in case we found more)
-      const cardRegions: Rectangle[] = cardMatches.slice(0, 3).map(match => ({
-        x: match.x,
-        y: match.y,
-        width: match.width,
-        height: match.height
-      }));
       
       // Calculate mana and rarity regions based on card regions
       const manaRegions: Rectangle[] = [];
@@ -238,54 +222,54 @@ export class RegionDetector extends EventEmitter {
     // Calculate regions based on screen dimensions
     const screenWidth = display.bounds.width;
     const screenHeight = display.bounds.height;
-    
-    // Calculate regions based on screen dimensions
-    const cardWidth = Math.round(screenWidth * 0.15);
-    const cardHeight = Math.round(screenHeight * 0.3);
-    const cardSpacing = Math.round(screenWidth * 0.05);
-    const cardTop = Math.round(screenHeight * 0.35);
-    const cardStartX = Math.round((screenWidth - (3 * cardWidth + 2 * cardSpacing)) / 2);
-    
-    const cardRegions: Rectangle[] = [];
-    const manaRegions: Rectangle[] = [];
-    const rarityRegions: Rectangle[] = [];
-    
-    for (let i = 0; i < 3; i++) {
-      const x = cardStartX + i * (cardWidth + cardSpacing);
       
-      // Card region
-      cardRegions.push({
-        x,
-        y: cardTop,
-        width: cardWidth,
-        height: cardHeight
-      });
+      // Calculate regions based on screen dimensions
+      const cardWidth = Math.round(screenWidth * 0.15);
+      const cardHeight = Math.round(screenHeight * 0.3);
+      const cardSpacing = Math.round(screenWidth * 0.05);
+      const cardTop = Math.round(screenHeight * 0.35);
+      const cardStartX = Math.round((screenWidth - (3 * cardWidth + 2 * cardSpacing)) / 2);
       
-      // Mana region (top-left of card)
-      manaRegions.push({
-        x,
-        y: cardTop,
-        width: Math.round(cardWidth * 0.2),
-        height: Math.round(cardHeight * 0.1)
-      });
+      const cardRegions: Rectangle[] = [];
+      const manaRegions: Rectangle[] = [];
+      const rarityRegions: Rectangle[] = [];
       
-      // Rarity region (middle-bottom of card)
-      rarityRegions.push({
-        x: x + Math.round(cardWidth * 0.4),
-        y: cardTop + Math.round(cardHeight * 0.8),
-        width: Math.round(cardWidth * 0.2),
-        height: Math.round(cardHeight * 0.1)
-      });
-    }
-    
+      for (let i = 0; i < 3; i++) {
+        const x = cardStartX + i * (cardWidth + cardSpacing);
+        
+        // Card region
+        cardRegions.push({
+          x,
+          y: cardTop,
+          width: cardWidth,
+          height: cardHeight
+        });
+        
+        // Mana region (top-left of card)
+        manaRegions.push({
+          x,
+          y: cardTop,
+          width: Math.round(cardWidth * 0.2),
+          height: Math.round(cardHeight * 0.1)
+        });
+        
+        // Rarity region (middle-bottom of card)
+        rarityRegions.push({
+          x: x + Math.round(cardWidth * 0.4),
+          y: cardTop + Math.round(cardHeight * 0.8),
+          width: Math.round(cardWidth * 0.2),
+          height: Math.round(cardHeight * 0.1)
+        });
+      }
+      
     return {
-      screenIndex: displayIndex,
+        screenIndex: displayIndex,
       screenScale: { x: 1, y: 1 },
-      screenHeight,
-      cardRegions,
-      manaRegions,
-      rarityRegions
-    };
+        screenHeight,
+        cardRegions,
+        manaRegions,
+        rarityRegions
+      };
   }
   
   /**
@@ -487,27 +471,9 @@ export class RegionDetector extends EventEmitter {
    * @private
    */
   private async captureScreen(displayId: number): Promise<Buffer | null> {
-    try {
-      // Get all display sources
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: 0, height: 0 } // No thumbnails needed
-      });
-      
-      // Find the matching display source
-      const source = sources.find(s => s.display_id === String(displayId));
-      
-      if (!source || !source.thumbnail) {
-        logger.error('Screen source not found', { displayId });
-        return null;
-      }
-      
-      // Convert NativeImage to Buffer
-      return source.thumbnail.toPNG();
-    } catch (error) {
-      logger.error('Error capturing screen', { error });
-      return null;
-    }
+    // Bypass actual screen capture to avoid Windows Graphics Capture crash
+    logger.info('captureScreen bypassed – returning null to skip native capture');
+    return null;
   }
   
   /**

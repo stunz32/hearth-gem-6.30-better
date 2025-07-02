@@ -160,8 +160,8 @@ export class HearthGemApp {
     ipcMain.handle('generateHashes', async () => {
       try {
         await buildCardHashes();
-        await this.imageMatcherService.generateAllHashes();
-        return true;
+      await this.imageMatcherService.generateAllHashes();
+      return true;
       } catch (error) {
         logger.error('Error generating hashes', { error });
         return false;
@@ -237,7 +237,10 @@ export class HearthGemApp {
         }
         
         // Start visual draft detection
-        this.visualDraftDetector.startDetection();
+        // Temporarily disabled to prevent Windows capture crashes
+        // this.visualDraftDetector.startDetection();
+        logger.info('All visual detection disabled due to Windows capture restrictions');
+        logger.info('App running in bypass mode - only hash database and UI available');
       } else {
         logger.warn('Hearthstone window not found, services will initialize when window is found');
       }

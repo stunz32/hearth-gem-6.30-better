@@ -325,7 +325,7 @@ export class ScreenCaptureService extends EventEmitter {
     if (this.screenDetection && this.screenDetection.cardRegions.length === 3) {
       return this.screenDetection.cardRegions.map((region, index) => ({
         x: region.x,
-        y: region.y, 
+        y: region.y,
         width: region.width,
         height: region.height,
         name: `card${index + 1}`
@@ -449,9 +449,9 @@ export class ScreenCaptureService extends EventEmitter {
         logger.debug('Requesting screen capture via desktopCapturer', { screenWidth, screenHeight });
         
         sources = await desktopCapturer.getSources({
-          types: ['screen'],
+        types: ['screen'],
           thumbnailSize: { width: screenWidth, height: screenHeight }
-        });
+      });
         
         logger.debug('Successfully got screen sources', { count: sources.length });
       } catch (captureError) {
@@ -464,7 +464,7 @@ export class ScreenCaptureService extends EventEmitter {
           error: `Screen capture blocked: ${captureError}`
         };
       }
-
+      
       if (sources.length === 0) {
         logger.warn('No screen sources returned by desktopCapturer');
         return {
@@ -475,7 +475,7 @@ export class ScreenCaptureService extends EventEmitter {
           error: 'No screen sources available'
         };
       }
-
+      
       const screenImage = sources[0].thumbnail;
 
       // Convert NativeImage -> Buffer (PNG) then crop
@@ -507,9 +507,9 @@ export class ScreenCaptureService extends EventEmitter {
         .toBuffer();
 
       const dataUrl = 'data:image/png;base64,' + croppedBuffer.toString('base64');
-
+      
       logger.debug('Region captured and cropped successfully', { region: region.name });
-
+      
       return {
         dataUrl,
         region,
@@ -859,12 +859,12 @@ export class ScreenCaptureService extends EventEmitter {
     // Hard stop: if we already have valid detection data, do NOT attempt screen capture
     if (this.screenDetection?.cardRegions?.length === 3) {
       logger.info('Using saved screen regions – skipping automatic detection');
-      return true;
-    }
+        return true;
+      }
 
     // Existing skip-for-now behaviour
     logger.info('Skipping automatic card region detection to prevent capture issues');
-    return false;
+      return false;
   }
   
   /**

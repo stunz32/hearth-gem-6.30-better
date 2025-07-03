@@ -81,7 +81,7 @@ export class RegionDetector extends EventEmitter {
       // Screen capture disabled to prevent Windows capture crashes
       logger.info('Screen capture disabled - assuming Hearthstone is available');
       logger.info('Hearthstone window found (bypass mode)');
-      return true;
+          return true;
     } catch (error) {
       logger.error('Error finding Hearthstone window', { error });
       return false;
@@ -473,7 +473,7 @@ export class RegionDetector extends EventEmitter {
   private async captureScreen(displayId: number): Promise<Buffer | null> {
     // Bypass actual screen capture to avoid Windows Graphics Capture crash
     logger.info('captureScreen bypassed – returning null to skip native capture');
-    return null;
+      return null;
   }
   
   /**

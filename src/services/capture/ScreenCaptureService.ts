@@ -1,4 +1,6 @@
 import { desktopCapturer, screen, Rectangle, ipcMain } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import logger from '../../utils/logger';
 import { EventEmitter } from 'events';
 import { RegionConfigService, CardRegion } from '../config/RegionConfigService';
@@ -6,6 +8,7 @@ import RegionDetector, { ScreenDetection } from './RegionDetector';
 import sharp from 'sharp';
 import { ICaptureRegionArgs, CaptureRegionResult, IScreenCaptureService } from '../../types/capture';
 import pino from 'pino';
+import type { CapturedRegionResult } from '../../types/capture';
 
 // Create a logger instance
 const loggerInstance = pino({
@@ -58,6 +61,16 @@ export interface PreprocessingOptions {
  * @module ScreenCaptureService
  */
 export class ScreenCaptureService extends EventEmitter implements IScreenCaptureService {
+  // Static method for getting the singleton instance
+  static getInstance(): ScreenCaptureService {
+    if (!instance) {
+      instance = new ScreenCaptureService();
+    }
+    return instance;
+  }
+  
+  // Instance reference for singleton pattern
+  private static instance: ScreenCaptureService | null = null;
   private static readonly HEARTHSTONE_WINDOW_TITLE = 'Hearthstone';
   private hearthstoneWindowId: string | null = null;
   private lastWindowBounds: Rectangle | null = null;
@@ -165,34 +178,34 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
    * @private
    */
   private defineCardNameRegions(): void {
-    // These are approximate regions for the card names in Arena draft
-    // They will need to be adjusted based on actual UI and resolution
+    // These are regions for capturing the full card art in Arena draft
+    // Based on the screenshot showing the "Choose a Legendary Group for your deck" UI
     
-    // Card 1 (left)
+    // Card 1 (left - The Lich King)
     this.cardNameRegions.push({
       name: 'card1',
-      x: 0.25, // 25% from left edge of window
-      y: 0.65, // 65% from top edge of window
-      width: 0.15, // 15% of window width
-      height: 0.05 // 5% of window height
+      x: 0.12, // 12% from left edge of window
+      y: 0.4,  // 40% from top edge of window
+      width: 0.22, // 22% of window width
+      height: 0.4  // 40% of window height
     });
     
-    // Card 2 (middle)
+    // Card 2 (middle - Xyrella)
     this.cardNameRegions.push({
       name: 'card2',
-      x: 0.5, // 50% from left edge of window
-      y: 0.65, // 65% from top edge of window
-      width: 0.15, // 15% of window width
-      height: 0.05 // 5% of window height
+      x: 0.41, // 41% from left edge of window
+      y: 0.4,  // 40% from top edge of window
+      width: 0.22, // 22% of window width
+      height: 0.4  // 40% of window height
     });
     
-    // Card 3 (right)
+    // Card 3 (right - Tyrande)
     this.cardNameRegions.push({
       name: 'card3',
-      x: 0.75, // 75% from left edge of window
-      y: 0.65, // 65% from top edge of window
-      width: 0.15, // 15% of window width
-      height: 0.05 // 5% of window height
+      x: 0.7,  // 70% from left edge of window
+      y: 0.4,  // 40% from top edge of window
+      width: 0.22, // 22% of window width
+      height: 0.4  // 40% of window height
     });
     
     loggerInstance.info('Card name regions defined', { regions: this.cardNameRegions });
@@ -356,7 +369,7 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
         name: `card${index + 1}`
       }));
     }
-
+    
     // Fall back to built-in heuristic regions so the user can at least capture something.
     loggerInstance.warn('No saved screen detection available – falling back to heuristic regions');
     const fallback = this.getAutomaticCaptureRegions();
@@ -462,7 +475,7 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
           height: thumbHeight
         }
       });
-
+      
       if (sources.length === 0) {
         throw new Error('No screen sources available for capture');
       }
@@ -783,30 +796,71 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       if (!this.hearthstoneWindowId || !this.lastWindowBounds) {
         const found = await this.findHearthstoneWindow();
         if (!found) {
-          loggerInstance.warn('Failed to find Hearthstone window for card name capture');
-          return [];
+          loggerInstance.warn('Hearthstone window not found – falling back to primary display bounds');
+          await this.updateWindowBounds();  // <-- generates a safe fallback
         }
       }
       
+      // Log window bounds for debugging
+      loggerInstance.info({ bounds: this.lastWindowBounds }, 'Window bounds for capture');
+      
       const results: CaptureResult[] = [];
       
-      // Capture each defined region
+      // First, validate that we have regions to capture
+      if (!this.cardNameRegions || this.cardNameRegions.length === 0) {
+        loggerInstance.warn('No card name regions defined for capture');
+        return results;
+      }
+      
+      loggerInstance.info({ count: this.cardNameRegions.length }, 'Starting capture of card name regions');
+      
+      // Convert each relative region → absolute pixels BEFORE capturing
       for (const region of this.cardNameRegions) {
+        loggerInstance.info({ region }, 'Processing region for capture');
+        
         try {
-          const result = await this.captureRegion(region);
+          const absRegion = this.calculateAbsoluteRegion(region);
+          loggerInstance.info({ absRegion }, 'Calculated absolute region');
+          
+          const result = await this.captureRegion(absRegion);
+          loggerInstance.info({ 
+            success: result.success,
+            hasDataUrl: !!result.dataUrl,
+            dataUrlLength: result.dataUrl ? result.dataUrl.length : 0
+          }, 'Capture result');
           
           if (result.success && result.dataUrl) {
             // Apply image preprocessing
             result.dataUrl = await this.preprocessImage(result.dataUrl, preprocessingOptions);
+            loggerInstance.info({
+              dataUrlLength: result.dataUrl ? result.dataUrl.length : 0
+            }, 'After preprocessing');
           }
           
-          // Cast because captureRegion returns a superset type that includes required CaptureResult fields
-          results.push(result as unknown as CaptureResult);
+          // Explicitly construct a proper CaptureResult
+          // Make sure dataUrl is properly formatted
+          let formattedDataUrl = result.dataUrl || '';
+          if (formattedDataUrl && !formattedDataUrl.startsWith('data:')) {
+            formattedDataUrl = 'data:image/png;base64,' + formattedDataUrl;
+          }
+          
+          const captureResult: CaptureResult = {
+            dataUrl: formattedDataUrl,
+            region: absRegion,
+            timestamp: Date.now(),
+            success: result.success || false
+          };
+          
+          if (result.error) {
+            captureResult.error = result.error;
+          }
+          
+          results.push(captureResult);
         } catch (error) {
           loggerInstance.error('Error capturing card name region', { region: region.name, error });
           results.push({
             dataUrl: '',
-            region,
+            region: this.calculateAbsoluteRegion(region),
             timestamp: Date.now(),
             success: false,
             error: `Capture failed: ${error}`
@@ -860,15 +914,50 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
    * @returns Promise resolving to true if regions were found, false otherwise
    */
   public async detectCardRegions(): Promise<boolean> {
-    // Hard stop: if we already have valid detection data, do NOT attempt screen capture
-    if (this.screenDetection?.cardRegions?.length === 3) {
-      loggerInstance.info('Using saved screen regions – skipping automatic detection');
+    try {
+      // Clear any saved screen detection settings to force new detection
+      await this.regionDetector.clearTemplateSettings();
+      
+      // Clear the screen detection cache
+      this.screenDetection = null;
+      
+      loggerInstance.info('Starting automatic card region detection');
+      
+      // Find the Hearthstone window first to make sure we're on the right display
+      await this.findHearthstoneWindow();
+      
+      // Find screen regions - this will use image template matching if available
+      // or fall back to heuristic detection
+      this.screenDetection = await this.regionDetector.findScreenRegions();
+      
+      if (this.screenDetection && this.screenDetection.cardRegions.length === 3) {
+        loggerInstance.info('Successfully detected card regions automatically', {
+          cardRegions: this.screenDetection.cardRegions.length
+        });
+        
+        // Convert detected regions to card name regions
+        this.cardNameRegions = this.screenDetection.cardRegions.map((region, index) => ({
+          name: `card${index + 1}`,
+          x: region.x,
+          y: region.y,
+          width: region.width,
+          height: region.height,
+          relative: false
+        }));
+        
         return true;
+      } else {
+        // If automatic detection fails, fall back to default regions
+        loggerInstance.warn('Automatic detection failed, falling back to default regions');
+        this.defineCardNameRegions();
+        return false;
       }
-
-    // Existing skip-for-now behaviour
-    loggerInstance.info('Skipping automatic card region detection to prevent capture issues');
+    } catch (error) {
+      loggerInstance.error('Error during card region detection', { error });
+      // Fall back to default regions in case of error
+      this.defineCardNameRegions();
       return false;
+    }
   }
   
   /**
@@ -936,6 +1025,77 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
         loggerInstance.error({ error }, 'Error in CAPTURE_REGION handler');
         throw error;
       }
+    });
+
+    ipcMain.handle('captureRegions', async () => {
+        loggerInstance.info('captureRegions IPC invoked');
+        try {
+            const results: CapturedRegionResult[] = await this.captureCardNameRegions();
+            
+            // Log detailed info about each result
+            for (let i = 0; i < results.length; i++) {
+                const result = results[i];
+                loggerInstance.info({
+                    index: i,
+                    name: result.region?.name,
+                    success: result.success,
+                    hasDataUrl: !!result.dataUrl,
+                    dataUrlLength: result.dataUrl ? result.dataUrl.length : 0
+                }, 'Capture result details');
+            }
+            
+            loggerInstance.info({ count: results.length }, 'captureRegions complete');
+            return results;
+        } catch (error) {
+            loggerInstance.error({ error }, 'Error in captureRegions handler');
+            throw error;
+        }
+    });
+    
+    // Add handlers for manual region configuration
+    ipcMain.handle('saveManualRegions', async (_, regions: CardRegion[]) => {
+        loggerInstance.info('saveManualRegions IPC invoked', { regionCount: regions.length });
+        try {
+            await this.updateManualRegions(regions);
+            return true;
+        } catch (error) {
+            loggerInstance.error({ error }, 'Error in saveManualRegions handler');
+            throw error;
+        }
+    });
+    
+    ipcMain.handle('clearManualRegions', async () => {
+        loggerInstance.info('clearManualRegions IPC invoked');
+        try {
+            await this.clearManualRegions();
+            return true;
+        } catch (error) {
+            loggerInstance.error({ error }, 'Error in clearManualRegions handler');
+            throw error;
+        }
+    });
+    
+    // Add handler for automatic region detection
+    ipcMain.handle('detectCardRegions', async () => {
+        loggerInstance.info('detectCardRegions IPC invoked');
+        try {
+            const result = await this.detectCardRegions();
+            return result;
+        } catch (error) {
+            loggerInstance.error({ error }, 'Error in detectCardRegions handler');
+            throw error;
+        }
+    });
+    
+    ipcMain.handle('findHearthstoneWindow', async () => {
+        loggerInstance.info('findHearthstoneWindow IPC invoked');
+        try {
+            const result = await this.findHearthstoneWindow();
+            return result;
+        } catch (error) {
+            loggerInstance.error({ error }, 'Error in findHearthstoneWindow handler');
+            throw error;
+        }
     });
 
     loggerInstance.debug('IPC handlers registered for screen capture');
@@ -1034,6 +1194,86 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       throw error;
     }
   }
-}
+
+  /**
+   * Update manual regions based on user input
+   * @param regions Array of manually configured regions
+   * @returns Promise resolving to true if successful
+   */
+  public async updateManualRegions(regions: CaptureRegion[]): Promise<boolean> {
+    try {
+      // Validate input
+      if (!regions || regions.length !== 3) {
+        loggerInstance.error('Invalid manual regions provided - must have exactly 3 regions');
+        return false;
+      }
+      
+      loggerInstance.info('Updating manual regions', { count: regions.length });
+      
+      // Update the cardNameRegions with the manual regions
+      this.cardNameRegions = regions.map((region, index) => ({
+        name: `card${index + 1}`,
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        // Mark as relative if the values are between 0-1
+        relative: region.x <= 1 && region.y <= 1 && region.width <= 1 && region.height <= 1
+      }));
+      
+      // Save to config file if possible
+      try {
+        const configPath = path.join(process.cwd(), 'data', 'config', 'regions.json');
+        fs.mkdirSync(path.dirname(configPath), { recursive: true });
+        fs.writeFileSync(configPath, JSON.stringify(this.cardNameRegions, null, 2));
+        loggerInstance.info('Saved manual regions to config file');
+      } catch (saveError) {
+        loggerInstance.warn('Could not save manual regions to config file', { saveError });
+        // Continue even if save fails
+      }
+      
+      loggerInstance.info('Successfully updated manual regions');
+      return true;
+    } catch (error) {
+      loggerInstance.error('Error updating manual regions', { error });
+      return false;
+    }
+  }
+  
+  /**
+   * Clear any manually configured regions
+   * @returns Promise resolving to true if successful
+   */
+  public async clearManualRegions(): Promise<boolean> {
+    try {
+      loggerInstance.info('Clearing manual regions');
+      
+      // Clear the card name regions array
+      this.cardNameRegions = [];
+      
+      // Reset by using auto-detection
+      const success = await this.detectCardRegions();
+      
+      // Clear any saved region config file
+      try {
+        const configPath = path.join(process.cwd(), 'data', 'config', 'regions.json');
+        if (fs.existsSync(configPath)) {
+          fs.unlinkSync(configPath);
+          loggerInstance.info('Removed manual regions config file');
+        }
+      } catch (removeError) {
+        loggerInstance.warn('Could not remove manual regions config file', { removeError });
+      }
+      
+      loggerInstance.info('Cleared manual regions', { autoDetectionSuccess: success });
+      return true;
+    } catch (error) {
+      loggerInstance.error('Error clearing manual regions', { error });
+      return false;
+    }
+  }
+
+// Create a singleton instance
+let instance: ScreenCaptureService | null = null;
 
 export default ScreenCaptureService;

@@ -1,0 +1,23 @@
+# Memory Server Configuration
+
+This configuration sets up the memory server with lessons support.
+
+```json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "node",
+      "args": ["./memory-server/dist/index.js"],
+      "env": {
+        "MEMORY_FILE_PATH": "./.cursor/memory.json"
+      }
+    }
+  }
+}
+```
+
+The memory server will:
+- Store memories in `.cursor/memory.json`
+- Support error tracking and lessons
+- Automatically manage file splitting for performance
+- Track patterns and solutions 

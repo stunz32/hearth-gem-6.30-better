@@ -78,13 +78,29 @@ export class RegionDetector extends EventEmitter {
     try {
       logger.info('Looking for Hearthstone window');
       
-      // Screen capture disabled to prevent Windows capture crashes
-      logger.info('Screen capture disabled - assuming Hearthstone is available');
-      logger.info('Hearthstone window found (bypass mode)');
-          return true;
+      // Attempt to find the Hearthstone window by capturing all windows
+      const sources = await desktopCapturer.getSources({
+        types: ['window'],
+        thumbnailSize: { width: 150, height: 150 }
+      });
+      
+      // Find the Hearthstone window by name
+      const hearthstoneWindow = sources.find(source => 
+        source.name.includes(RegionDetector.HEARTHSTONE_WINDOW_TITLE)
+      );
+      
+      if (hearthstoneWindow) {
+        logger.info('Hearthstone window found', { id: hearthstoneWindow.id });
+        return true;
+      }
+      
+      // If we couldn't find the window, we'll fall back to using the primary screen
+      logger.info('Hearthstone window not found by name. Assuming it\'s running on the primary display.');
+      return true;
     } catch (error) {
       logger.error('Error finding Hearthstone window', { error });
-      return false;
+      // Return true as a fallback - we'll use the primary display
+      return true;
     }
   }
   
@@ -471,9 +487,49 @@ export class RegionDetector extends EventEmitter {
    * @private
    */
   private async captureScreen(displayId: number): Promise<Buffer | null> {
-    // Bypass actual screen capture to avoid Windows Graphics Capture crash
-    logger.info('captureScreen bypassed – returning null to skip native capture');
+    try {
+      logger.info('Capturing screen for region detection');
+      
+      // Get all displays
+      const displays = screen.getAllDisplays();
+      const display = displays.find(d => d.id === displayId) || screen.getPrimaryDisplay();
+      
+      // Set a safe thumbnail size to prevent Skia bitmap allocation crashes
+      const { width, height } = display.bounds;
+      const scaleFactor = display.scaleFactor || 1;
+      const safeWidth = Math.round(width / scaleFactor);
+      const safeHeight = Math.round(height / scaleFactor);
+      
+      // Capture the screen with safe dimensions
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: {
+          width: safeWidth,
+          height: safeHeight
+        }
+      });
+      
+      // Find the matching source
+      const source = sources.find(s => {
+        // Try to match by display ID if possible
+        if (s.display_id) {
+          return s.display_id.toString() === displayId.toString();
+        }
+        // Fallback: use the first source
+        return true;
+      });
+      
+      if (!source || !source.thumbnail) {
+        logger.error('No screen source or thumbnail available');
+        return null;
+      }
+      
+      // Convert NativeImage to buffer
+      return source.thumbnail.toPNG();
+    } catch (error) {
+      logger.error('Error capturing screen', { error });
       return null;
+    }
   }
   
   /**

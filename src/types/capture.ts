@@ -60,4 +60,17 @@ export interface IScreenCaptureService {
    * @returns Promise resolving to raw PNG bytes with compatibility properties
    */
   captureRegion(args: ICaptureRegionArgs | CaptureRegion): Promise<CaptureRegionResult>;
+}
+
+export interface CapturedRegionResult {
+  region: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    name: string;
+  };
+  dataUrl: string;  // Base-64 PNG
+  success: boolean;
+  error?: string;
 } 

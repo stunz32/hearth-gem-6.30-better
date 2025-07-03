@@ -128,21 +128,8 @@ export class HearthGemApp {
       return await this.screenCaptureService.findHearthstoneWindow();
     });
     
-    // Listen for captureRegions event
-    ipcMain.handle('captureRegions', async () => {
-      const regions = await this.screenCaptureService.getCaptureRegions();
-      const results = [];
-      
-      for (const region of regions) {
-        // Use the original capture method for compatibility
-        const result = await this.screenCaptureService.captureRegion(region);
-        if (result.success) {
-          results.push(result);
-        }
-      }
-      
-      return results;
-    });
+    // The captureRegions handler is now implemented in ScreenCaptureService
+    // Removing duplicate handler to avoid "handler already registered" warnings
     
     // Listen for detectCards event
     ipcMain.handle('detectCards', async () => {
@@ -233,6 +220,9 @@ export class HearthGemApp {
    * Initialize services
    */
   private async initializeServices(): Promise<void> {
+    // Initialize ScreenCaptureService to register IPC handlers
+    this.screenCaptureService.initialize();
+    
     try {
       // Find Hearthstone window
       const hearthstoneFound = await this.screenCaptureService.findHearthstoneWindow();

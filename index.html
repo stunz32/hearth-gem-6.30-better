@@ -84,6 +84,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 20px;
+      min-height: 100px;
     }
     
     .card {
@@ -113,6 +114,22 @@
       display: flex;
       flex-wrap: wrap;
       gap: 20px;
+      min-height: 100px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border: 1px dashed #ccc;
+      margin-top: 10px;
+    }
+    
+    /* Debug styling for the capture container */
+    #captureContainer .debug-info {
+      width: 100%;
+      background-color: #e8f5e9;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
     }
     
     .capture-wrapper {
@@ -152,7 +169,7 @@
       
       <div class="button-group">
         <button id="findHearthstoneBtn">Find Hearthstone</button>
-        <button id="detectRegionsBtn">Detect Card Regions</button>
+        <button id="detectRegionsBtn">Auto-Detect Regions</button>
         <button id="captureRegionsBtn">Capture Regions</button>
       </div>
       
@@ -165,7 +182,177 @@
       <div class="button-group">
         <button id="generateHashesBtn">Generate Card Hashes</button>
       </div>
+      
+      <div class="manual-region-config">
+        <h3>Manual Region Configuration</h3>
+        <p>Set exact card positions when automatic detection isn't working:</p>
+        
+        <div class="region-grid">
+          <div class="region-card">
+            <h4>Card 1 (Left)</h4>
+            <div class="region-inputs">
+              <div class="input-group">
+                <label for="card1-x">X (%):</label>
+                <input type="number" id="card1-x" min="0" max="100" step="1" value="12">
+              </div>
+              <div class="input-group">
+                <label for="card1-y">Y (%):</label>
+                <input type="number" id="card1-y" min="0" max="100" step="1" value="40">
+              </div>
+              <div class="input-group">
+                <label for="card1-width">Width (%):</label>
+                <input type="number" id="card1-width" min="1" max="100" step="1" value="22">
+              </div>
+              <div class="input-group">
+                <label for="card1-height">Height (%):</label>
+                <input type="number" id="card1-height" min="1" max="100" step="1" value="40">
+              </div>
+            </div>
+          </div>
+          
+          <div class="region-card">
+            <h4>Card 2 (Middle)</h4>
+            <div class="region-inputs">
+              <div class="input-group">
+                <label for="card2-x">X (%):</label>
+                <input type="number" id="card2-x" min="0" max="100" step="1" value="41">
+              </div>
+              <div class="input-group">
+                <label for="card2-y">Y (%):</label>
+                <input type="number" id="card2-y" min="0" max="100" step="1" value="40">
+              </div>
+              <div class="input-group">
+                <label for="card2-width">Width (%):</label>
+                <input type="number" id="card2-width" min="1" max="100" step="1" value="22">
+              </div>
+              <div class="input-group">
+                <label for="card2-height">Height (%):</label>
+                <input type="number" id="card2-height" min="1" max="100" step="1" value="40">
+              </div>
+            </div>
+          </div>
+          
+          <div class="region-card">
+            <h4>Card 3 (Right)</h4>
+            <div class="region-inputs">
+              <div class="input-group">
+                <label for="card3-x">X (%):</label>
+                <input type="number" id="card3-x" min="0" max="100" step="1" value="70">
+              </div>
+              <div class="input-group">
+                <label for="card3-y">Y (%):</label>
+                <input type="number" id="card3-y" min="0" max="100" step="1" value="40">
+              </div>
+              <div class="input-group">
+                <label for="card3-width">Width (%):</label>
+                <input type="number" id="card3-width" min="1" max="100" step="1" value="22">
+              </div>
+              <div class="input-group">
+                <label for="card3-height">Height (%):</label>
+                <input type="number" id="card3-height" min="1" max="100" step="1" value="40">
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="region-actions">
+          <button id="saveRegionsBtn">Save Manual Regions</button>
+          <button id="clearRegionsBtn">Clear Manual Regions</button>
+        </div>
+      </div>
     </div>
+    
+    <style>
+      .manual-region-config {
+        margin-top: 20px;
+        border-top: 1px solid #444;
+        padding-top: 15px;
+      }
+      
+      .manual-region-config h3 {
+        color: #CF9C38;
+        margin-bottom: 5px;
+      }
+      
+      .manual-region-config p {
+        font-size: 14px;
+        margin-bottom: 15px;
+        color: #DDD;
+      }
+      
+      .region-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 15px;
+      }
+      
+      .region-card {
+        background: rgba(30, 30, 30, 0.7);
+        border: 1px solid #555;
+        padding: 15px;
+        border-radius: 5px;
+        flex: 1;
+        min-width: 200px;
+      }
+      
+      .region-card h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: #FFD700;
+        border-bottom: 1px solid #444;
+        padding-bottom: 5px;
+      }
+      
+      .region-inputs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      
+      .input-group {
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .input-group label {
+        margin-bottom: 5px;
+        font-size: 12px;
+        color: #CCC;
+      }
+      
+      .input-group input {
+        background: #333;
+        border: 1px solid #555;
+        color: white;
+        padding: 5px 8px;
+        border-radius: 3px;
+      }
+      
+      .region-actions {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 10px;
+      }
+      
+      .region-actions button {
+        padding: 8px 16px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      
+      .region-actions button:last-child {
+        background: #F44336;
+      }
+      
+      .region-actions button:hover {
+        opacity: 0.9;
+      }
+    </style>
     
     <div class="section">
       <h2>Detected Cards</h2>

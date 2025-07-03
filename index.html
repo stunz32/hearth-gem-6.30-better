@@ -182,6 +182,8 @@
     </div>
   </div>
   
+  <!-- Stub CommonJS export object so renderer bundle compiled to CommonJS works in browser context -->
+  <script>window.exports = window.exports || {};</script>
   <script src="./dist/renderer.js"></script>
 </body>
 </html>

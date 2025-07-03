@@ -233,7 +233,7 @@ export class VisualDraftDetector extends EventEmitter {
         
         try {
           // Extract card index from region name
-          const cardIndexMatch = result.region.name.match(/card(\d+)/);
+          const cardIndexMatch = result.region!.name.match(/card(\d+)/);
           const cardIndex = cardIndexMatch ? parseInt(cardIndexMatch[1]) : i + 1;
           
           // Use fast-hash image matching as primary detection method
@@ -241,11 +241,11 @@ export class VisualDraftDetector extends EventEmitter {
           
           // Additional verification with mana cost and rarity if available
           const manaMatch = i < manaResults.length && manaResults[i].success && manaResults[i].dataUrl
-            ? await this.templateMatcherService.matchManaTemplate(manaResults[i].dataUrl)
+            ? await this.templateMatcherService.matchManaTemplate(manaResults[i].dataUrl!)
             : { cardId: '', confidence: 0 };
             
           const rarityMatch = i < rarityResults.length && rarityResults[i].success && rarityResults[i].dataUrl
-            ? await this.templateMatcherService.matchRarityTemplate(rarityResults[i].dataUrl)
+            ? await this.templateMatcherService.matchRarityTemplate(rarityResults[i].dataUrl!)
             : { cardId: '', confidence: 0 };
           
           // Weighted combination of all matching methods
@@ -276,7 +276,7 @@ export class VisualDraftDetector extends EventEmitter {
           }
         } catch (error) {
           logger.error('Error processing capture result', { 
-            regionName: result.region.name,
+            regionName: result.region!.name,
             error
           });
         }

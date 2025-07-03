@@ -1,4 +1,4 @@
-import { ICaptureRegionArgs, CaptureRegionResult } from './types/capture';
+import { ICaptureRegionArgs, CaptureRegionResult, CaptureRegion } from './types/capture';
 
 declare global {
   interface Window {
@@ -27,9 +27,9 @@ declare global {
       /**
        * Capture a specific region of the screen
        * @param args Region coordinates and dimensions
-       * @returns Promise resolving to raw PNG bytes
+       * @returns Promise resolving to raw PNG bytes with compatibility properties
        */
-      captureRegion: (args: ICaptureRegionArgs) => Promise<CaptureRegionResult>;
+      captureRegion: (args: ICaptureRegionArgs | CaptureRegion) => Promise<CaptureRegionResult>;
     };
   }
 }

@@ -1,5 +1,5 @@
 import { desktopCapturer, screen, ipcMain } from 'electron';
-import { ICaptureRegionArgs, CaptureRegionResult, IScreenCaptureService } from '../../types/capture';
+import { ICaptureRegionArgs, CaptureRegionResult, IScreenCaptureService, CaptureRegion, CaptureResult } from '../../types/capture';
 import sharp from 'sharp';
 import pino from 'pino';
 
@@ -47,7 +47,7 @@ export class SafeCaptureService implements IScreenCaptureService {
    * Register IPC handlers for screen capture
    */
   private registerIpcHandlers(): void {
-    ipcMain.handle('CAPTURE_REGION', async (_, args: ICaptureRegionArgs) => {
+    ipcMain.handle('CAPTURE_REGION', async (_, args: ICaptureRegionArgs | CaptureRegion) => {
       return this.captureRegion(args);
     });
 
@@ -59,9 +59,9 @@ export class SafeCaptureService implements IScreenCaptureService {
    * Uses a safe thumbnail size to avoid Skia bitmap allocation crashes
    * 
    * @param args Region coordinates and dimensions
-   * @returns Promise resolving to raw PNG bytes
+   * @returns Promise resolving to raw PNG bytes with compatibility properties
    */
-  public async captureRegion(args: ICaptureRegionArgs): Promise<CaptureRegionResult> {
+  public async captureRegion(args: ICaptureRegionArgs | CaptureRegion): Promise<CaptureRegionResult> {
     try {
       // Get the primary display information
       const primaryDisplay = screen.getPrimaryDisplay();
@@ -106,7 +106,18 @@ export class SafeCaptureService implements IScreenCaptureService {
       });
 
       if (sources.length === 0) {
-        throw new Error('No screen sources available for capture');
+        const error = 'No screen sources available for capture';
+        log.error(error);
+        
+        // Return a compatible error result
+        const errorResult = new Uint8Array(0) as CaptureRegionResult;
+        errorResult.success = false;
+        errorResult.error = error;
+        errorResult.timestamp = Date.now();
+        if ('name' in args) {
+          errorResult.region = args as CaptureRegion;
+        }
+        return errorResult;
       }
 
       // Get the primary screen source
@@ -116,7 +127,18 @@ export class SafeCaptureService implements IScreenCaptureService {
       const thumbnail = source.thumbnail;
       
       if (!thumbnail) {
-        throw new Error('Failed to capture screen thumbnail');
+        const error = 'Failed to capture screen thumbnail';
+        log.error(error);
+        
+        // Return a compatible error result
+        const errorResult = new Uint8Array(0) as CaptureRegionResult;
+        errorResult.success = false;
+        errorResult.error = error;
+        errorResult.timestamp = Date.now();
+        if ('name' in args) {
+          errorResult.region = args as CaptureRegion;
+        }
+        return errorResult;
       }
 
       // Convert thumbnail to buffer for processing with sharp
@@ -151,16 +173,41 @@ export class SafeCaptureService implements IScreenCaptureService {
         .png()
         .toBuffer();
       
+      // Create a Uint8Array from the buffer
+      const pngBytes = new Uint8Array(croppedBuffer);
+      
+      // Add compatibility properties
+      const result = pngBytes as CaptureRegionResult;
+      result.success = true;
+      result.timestamp = Date.now();
+      
+      // Add dataUrl for compatibility with existing code
+      result.dataUrl = 'data:image/png;base64,' + croppedBuffer.toString('base64');
+      
+      // Add region info if available
+      if ('name' in args) {
+        result.region = args as CaptureRegion;
+      }
+      
       log.debug({
         bytes: croppedBuffer.length
       }, 'Capture completed');
       
-      return new Uint8Array(croppedBuffer);
+      return result;
     } catch (error) {
       log.error({
         error
       }, 'Error in captureRegion');
-      throw error;
+      
+      // Return a compatible error result
+      const errorResult = new Uint8Array(0) as CaptureRegionResult;
+      errorResult.success = false;
+      errorResult.error = error instanceof Error ? error.message : String(error);
+      errorResult.timestamp = Date.now();
+      if ('name' in args) {
+        errorResult.region = args as CaptureRegion;
+      }
+      return errorResult;
     }
   }
 }

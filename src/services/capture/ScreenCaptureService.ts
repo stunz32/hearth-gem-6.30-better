@@ -425,7 +425,8 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
     try {
       // Get the primary display information
       const primaryDisplay = screen.getPrimaryDisplay();
-      const { width: displayWidth, height: displayHeight, scaleFactor } = primaryDisplay;
+      const { bounds, scaleFactor } = primaryDisplay;
+      const { width: displayWidth, height: displayHeight } = bounds;
       
       // Calculate safe thumbnail size (physical resolution ÷ DPI scale)
       const thumbWidth = Math.round(displayWidth / scaleFactor);
@@ -500,7 +501,18 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
         croppedSize: croppedBuffer.length
       }, 'Capture completed successfully');
       
-      return new Uint8Array(croppedBuffer);
+      // Build a full capture result that includes both raw bytes and metadata expected by callers
+      const rawBytes = new Uint8Array(croppedBuffer);
+      const dataUrl = `data:image/png;base64,${Buffer.from(croppedBuffer).toString('base64')}`;
+
+      // Attach the extra properties to the Uint8Array instance so it satisfies CaptureRegionResult & CaptureResult
+      const captureResult: any = rawBytes;
+      captureResult.dataUrl = dataUrl;
+      captureResult.region = args;
+      captureResult.timestamp = Date.now();
+      captureResult.success = true;
+
+      return captureResult as unknown as CaptureRegionResult;
     } catch (error) {
       loggerInstance.error({ error }, 'Error capturing screen region');
       throw error;
@@ -775,7 +787,8 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
             result.dataUrl = await this.preprocessImage(result.dataUrl, preprocessingOptions);
           }
           
-          results.push(result);
+          // Cast because captureRegion returns a superset type that includes required CaptureResult fields
+          results.push(result as unknown as CaptureResult);
         } catch (error) {
           loggerInstance.error('Error capturing card name region', { region: region.name, error });
           results.push({
@@ -926,9 +939,8 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
     try {
       // Get the primary display information
       const primaryDisplay = screen.getPrimaryDisplay();
-      const displayWidth = primaryDisplay.bounds.width;
-      const displayHeight = primaryDisplay.bounds.height;
-      const scaleFactor = primaryDisplay.scaleFactor;
+      const { bounds, scaleFactor } = primaryDisplay;
+      const { width: displayWidth, height: displayHeight } = bounds;
       
       // Calculate safe thumbnail size (physical resolution ÷ DPI scale)
       const thumbWidth = Math.round(displayWidth / scaleFactor);

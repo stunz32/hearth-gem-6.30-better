@@ -1,4 +1,7 @@
-// Preload script
+// Ensure CommonJS globals exist in sandboxed renderer (needed because we compile renderer.js with CommonJS but NodeIntegration is disabled)
+// This prevents errors like 'exports is not defined' when the renderer bundle references CommonJS globals.
+globalThis.exports = globalThis.exports || {};
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods that allow the renderer process to use

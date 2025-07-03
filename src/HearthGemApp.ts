@@ -65,7 +65,8 @@ export class HearthGemApp {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js')
+        // Point to the original preload script in the src directory so it is always found
+        preload: path.join(__dirname, '../src/preload.js')
       }
     });
     
@@ -175,8 +176,8 @@ export class HearthGemApp {
     ipcMain.handle('generateHashes', async () => {
       try {
         await buildCardHashes();
-        await this.imageMatcherService.generateAllHashes();
-        return true;
+      await this.imageMatcherService.generateAllHashes();
+      return true;
       } catch (error) {
         logger.error('Error generating hashes', { error });
         return false;

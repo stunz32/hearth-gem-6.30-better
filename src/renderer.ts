@@ -1,32 +1,5 @@
 // Import types
-import { DetectedCard, DraftDetectionResult } from './services/draft/VisualDraftDetector';
-
-// Declare the window API
-declare global {
-  interface Window {
-    api: {
-      findHearthstoneWindow: () => Promise<boolean>;
-      captureRegions: () => Promise<any[]>;
-      detectCards: () => Promise<DraftDetectionResult>;
-      startDetection: (intervalMs?: number) => Promise<boolean>;
-      stopDetection: () => Promise<boolean>;
-      saveManualRegions: (regions: any[]) => Promise<boolean>;
-      clearManualRegions: () => Promise<void>;
-      generateHashes: () => Promise<boolean>;
-      addCardImage: (imageData: string, cardId: string) => Promise<boolean>;
-      addManaTemplate: (imageData: string, cardId: string) => Promise<boolean>;
-      addRarityTemplate: (imageData: string, cardId: string) => Promise<boolean>;
-      detectCardRegions: () => Promise<boolean>;
-      
-      // Event listeners
-      onCardsDetected: (callback: (result: DraftDetectionResult) => void) => void;
-      removeAllListeners: () => void;
-    };
-    desktop: {
-      captureRegion: (region: { x: number; y: number; width: number; height: number }) => Promise<Buffer>;
-    };
-  }
-}
+import type { DraftDetectionResult } from './services/draft/VisualDraftDetector';
 
 // DOM elements
 let findHearthstoneBtn: HTMLButtonElement;
@@ -271,17 +244,17 @@ async function testSafeCapture(): Promise<void> {
     console.log('Testing safe capture method...');
     
     // Capture a small region of the screen
-    const pngBuffer = await window.desktop.captureRegion({
+    const result = await window.desktop.captureRegion({
       x: 100,
       y: 100,
       width: 320,
       height: 180
     });
     
-    console.log('Capture successful, bytes:', pngBuffer.length);
+    console.log('Capture successful, bytes:', result.length);
     
     // Create a blob URL from the PNG buffer
-    const blob = new Blob([pngBuffer], { type: 'image/png' });
+    const blob = new Blob([result], { type: 'image/png' });
     const url = URL.createObjectURL(blob);
     
     // Display the captured image (example)

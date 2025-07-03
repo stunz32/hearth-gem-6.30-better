@@ -1,9 +1,22 @@
-import { desktopCapturer, screen, Rectangle } from 'electron';
+import { desktopCapturer, screen, Rectangle, ipcMain } from 'electron';
 import logger from '../../utils/logger';
 import { EventEmitter } from 'events';
 import { RegionConfigService, CardRegion } from '../config/RegionConfigService';
 import RegionDetector, { ScreenDetection } from './RegionDetector';
 import sharp from 'sharp';
+import { ICaptureRegionArgs, CaptureRegionResult, IScreenCaptureService } from '../../types/capture';
+import pino from 'pino';
+
+// Create a logger instance
+const loggerInstance = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true
+    }
+  }
+});
 
 /**
  * Interface for capture region
@@ -14,6 +27,7 @@ export interface CaptureRegion {
   y: number;
   width: number;
   height: number;
+  relative?: boolean;
 }
 
 /**
@@ -43,7 +57,7 @@ export interface PreprocessingOptions {
  * Handles capturing screenshots of the Hearthstone window
  * @module ScreenCaptureService
  */
-export class ScreenCaptureService extends EventEmitter {
+export class ScreenCaptureService extends EventEmitter implements IScreenCaptureService {
   private static readonly HEARTHSTONE_WINDOW_TITLE = 'Hearthstone';
   private hearthstoneWindowId: string | null = null;
   private lastWindowBounds: Rectangle | null = null;
@@ -61,6 +75,18 @@ export class ScreenCaptureService extends EventEmitter {
   private screenSize: { width: number; height: number } | null = null;
   private screenDetection: ScreenDetection | null = null;
   
+  private static instance: ScreenCaptureService;
+  
+  /**
+   * Get the singleton instance of the screen capture service
+   */
+  public static getInstance(): ScreenCaptureService {
+    if (!ScreenCaptureService.instance) {
+      ScreenCaptureService.instance = new ScreenCaptureService();
+    }
+    return ScreenCaptureService.instance;
+  }
+  
   /**
    * Creates a new ScreenCaptureService instance
    */
@@ -69,7 +95,7 @@ export class ScreenCaptureService extends EventEmitter {
     this.regionConfigService = new RegionConfigService();
     this.regionDetector = new RegionDetector();
     this.initializeRegions();
-    logger.info('ScreenCaptureService initialized');
+    loggerInstance.info('ScreenCaptureService initialized');
     
     // Define default card name regions (relative to Hearthstone window)
     // These will need to be adjusted based on actual Hearthstone UI
@@ -90,15 +116,15 @@ export class ScreenCaptureService extends EventEmitter {
       this.manualRegions = await this.regionConfigService.getCurrentRegions(this.screenSize);
       
       if (this.manualRegions) {
-        logger.info('Loaded manual card regions', { 
+        loggerInstance.info('Loaded manual card regions', { 
           regionCount: this.manualRegions.length,
           screenSize: this.screenSize 
         });
       } else {
-        logger.info('No manual regions configured, will use automatic detection');
+        loggerInstance.info('No manual regions configured, will use automatic detection');
       }
     } catch (error) {
-      logger.error('Error initializing regions', { error });
+      loggerInstance.error('Error initializing regions', { error });
     }
   }
   
@@ -115,9 +141,9 @@ export class ScreenCaptureService extends EventEmitter {
       await this.regionConfigService.saveConfig(regions, this.screenSize);
       this.manualRegions = regions;
       
-      logger.info('Manual regions updated', { regionCount: regions.length });
+      loggerInstance.info('Manual regions updated', { regionCount: regions.length });
     } catch (error) {
-      logger.error('Error updating manual regions', { error });
+      loggerInstance.error('Error updating manual regions', { error });
       throw error;
     }
   }
@@ -169,7 +195,7 @@ export class ScreenCaptureService extends EventEmitter {
       height: 0.05 // 5% of window height
     });
     
-    logger.info('Card name regions defined', { regions: this.cardNameRegions });
+    loggerInstance.info('Card name regions defined', { regions: this.cardNameRegions });
   }
   
   /**
@@ -192,7 +218,7 @@ export class ScreenCaptureService extends EventEmitter {
       } else {
         // If testing/development, use any available window
         if (process.env.NODE_ENV === 'development') {
-          logger.info('Development mode: Using fallback window');
+          loggerInstance.info('Development mode: Using fallback window');
           this.hearthstoneWindowId = 'dev-fallback';
           await this.updateWindowBounds();
           return true;
@@ -203,7 +229,7 @@ export class ScreenCaptureService extends EventEmitter {
         return false;
       }
     } catch (error) {
-      logger.error('Error finding Hearthstone window', { error });
+      loggerInstance.error('Error finding Hearthstone window', { error });
       this.hearthstoneWindowId = null;
       this.lastWindowBounds = null;
       return false;
@@ -228,7 +254,7 @@ export class ScreenCaptureService extends EventEmitter {
         height
       };
       
-      logger.info('Using fallback window bounds in development mode', { bounds: this.lastWindowBounds });
+      loggerInstance.info('Using fallback window bounds in development mode', { bounds: this.lastWindowBounds });
       return;
     }
     
@@ -252,7 +278,7 @@ export class ScreenCaptureService extends EventEmitter {
           height
         };
         
-        logger.info('Updated Hearthstone window bounds from screen detection', { bounds: this.lastWindowBounds });
+        loggerInstance.info('Updated Hearthstone window bounds from screen detection', { bounds: this.lastWindowBounds });
         return;
       }
     }
@@ -269,7 +295,7 @@ export class ScreenCaptureService extends EventEmitter {
       height
     };
     
-    logger.info('Using fallback window bounds', { bounds: this.lastWindowBounds });
+    loggerInstance.info('Using fallback window bounds', { bounds: this.lastWindowBounds });
   }
   
   /**
@@ -320,7 +346,7 @@ export class ScreenCaptureService extends EventEmitter {
    */
   async getCaptureRegions(): Promise<CaptureRegion[]> {
     // Completely disable automatic capture to prevent Windows capture crashes
-    logger.info('Automatic capture disabled - using saved settings only');
+    loggerInstance.info('Automatic capture disabled - using saved settings only');
     
     if (this.screenDetection && this.screenDetection.cardRegions.length === 3) {
       return this.screenDetection.cardRegions.map((region, index) => ({
@@ -332,7 +358,7 @@ export class ScreenCaptureService extends EventEmitter {
       }));
     }
     
-    logger.warn('No saved screen detection available');
+    loggerInstance.warn('No saved screen detection available');
     return [];
   }
   
@@ -389,143 +415,95 @@ export class ScreenCaptureService extends EventEmitter {
   }
   
   /**
-   * Capture a specific region of the screen
-   * @param region Region to capture
-   * @returns Promise resolving to capture result
+   * Captures a specific region of the screen using the new safe method
+   * Uses a safe thumbnail size to avoid Skia bitmap allocation crashes
+   * 
+   * @param args Region coordinates and dimensions
+   * @returns Promise resolving to raw PNG bytes
    */
-  public async captureRegion(region: CaptureRegion): Promise<CaptureResult> {
-    logger.debug('=== captureRegion called ===', { regionName: region.name, region });
-    
+  public async captureRegion(args: ICaptureRegionArgs): Promise<CaptureRegionResult> {
     try {
-      // Find Hearthstone window if not already found
-      if (!this.hearthstoneWindowId || !this.lastWindowBounds) {
-        const found = await this.findHearthstoneWindow();
-        if (!found) {
-          return {
-            dataUrl: '',
-            region,
-            timestamp: Date.now(),
-            success: false,
-            error: 'Hearthstone window not found'
-          };
-        }
-      }
-      
-      // Calculate absolute region coordinates
-      const absoluteRegion = this.calculateAbsoluteRegion(region);
-      
-      // Debug log and safety guard before attempting capture
-      logger.debug('Capture rect about to be used', {
-        regionName: region.name,
-        captureRect: absoluteRegion
-      });
-
-      // Safety guard – prevent Skia fatal allocation on absurd sizes
-      const MAX_DIMENSION = 4096; // Anything larger is certainly wrong
-      if (
-        absoluteRegion.width  > MAX_DIMENSION ||
-        absoluteRegion.height > MAX_DIMENSION ||
-        absoluteRegion.width  <= 0 ||
-        absoluteRegion.height <= 0
-      ) {
-        logger.error('Aborting capture – invalid rect', { captureRect: absoluteRegion });
-        return {
-          dataUrl: '',
-          region,
-          timestamp: Date.now(),
-          success: false,
-          error: 'Invalid capture size'
-        };
-      }
-      
-      // Capture *entire* screen at display resolution, then crop with sharp.
+      // Get the primary display information
       const primaryDisplay = screen.getPrimaryDisplay();
-      const screenWidth  = primaryDisplay.size.width;
-      const screenHeight = primaryDisplay.size.height;
-
-      let sources: Electron.DesktopCapturerSource[] = [];
+      const { width: displayWidth, height: displayHeight, scaleFactor } = primaryDisplay;
       
-      try {
-        logger.debug('Requesting screen capture via desktopCapturer', { screenWidth, screenHeight });
-        
-        sources = await desktopCapturer.getSources({
+      // Calculate safe thumbnail size (physical resolution ÷ DPI scale)
+      const thumbWidth = Math.round(displayWidth / scaleFactor);
+      const thumbHeight = Math.round(displayHeight / scaleFactor);
+      
+      loggerInstance.debug({
+        displayWidth,
+        displayHeight,
+        scaleFactor,
+        thumbWidth,
+        thumbHeight,
+        captureArgs: args
+      }, 'Requested screen capture');
+
+      // Capture the screen at the safe thumbnail size
+      const sources = await desktopCapturer.getSources({
         types: ['screen'],
-          thumbnailSize: { width: screenWidth, height: screenHeight }
+        thumbnailSize: {
+          width: thumbWidth,
+          height: thumbHeight
+        }
       });
-        
-        logger.debug('Successfully got screen sources', { count: sources.length });
-      } catch (captureError) {
-        logger.error('Screen capture failed in captureRegion', { error: captureError });
-        return {
-          dataUrl: '',
-          region,
-          timestamp: Date.now(),
-          success: false,
-          error: `Screen capture blocked: ${captureError}`
-        };
-      }
-      
+
       if (sources.length === 0) {
-        logger.warn('No screen sources returned by desktopCapturer');
-        return {
-          dataUrl: '',
-          region,
-          timestamp: Date.now(),
-          success: false,
-          error: 'No screen sources available'
-        };
+        throw new Error('No screen sources available for capture');
       }
+
+      // Get the primary screen source
+      const source = sources[0];
       
-      const screenImage = sources[0].thumbnail;
-
-      // Convert NativeImage -> Buffer (PNG) then crop
-      const screenBuffer = screenImage.toPNG();
-
-      // Calculate crop offsets relative to the display
-      const cropLeft = absoluteRegion.x - primaryDisplay.bounds.x;
-      const cropTop  = absoluteRegion.y - primaryDisplay.bounds.y;
-
-      // Ensure crop region is within bounds
-      if (
-        cropLeft < 0 || cropTop < 0 ||
-        cropLeft + absoluteRegion.width  > screenWidth ||
-        cropTop  + absoluteRegion.height > screenHeight
-      ) {
-        logger.error('Crop region out of screen bounds', { cropLeft, cropTop, captureRect: absoluteRegion, screenWidth, screenHeight });
-        return {
-          dataUrl: '',
-          region,
-          timestamp: Date.now(),
-          success: false,
-          error: 'Crop region out of bounds'
-        };
+      // Get the thumbnail as NativeImage
+      const thumbnail = source.thumbnail;
+      
+      if (!thumbnail) {
+        throw new Error('Failed to capture screen thumbnail');
       }
 
-      const croppedBuffer = await sharp(screenBuffer)
-        .extract({ left: cropLeft, top: cropTop, width: absoluteRegion.width, height: absoluteRegion.height })
+      // Convert thumbnail to buffer for processing with sharp
+      const thumbnailBuffer = thumbnail.toPNG();
+      
+      // Calculate the scaling ratio between the thumbnail and actual display
+      const scaleX = thumbWidth / displayWidth;
+      const scaleY = thumbHeight / displayHeight;
+      
+      // Scale the requested region coordinates to match the thumbnail scale
+      const scaledRegion = {
+        left: Math.round(args.x * scaleX),
+        top: Math.round(args.y * scaleY),
+        width: Math.round(args.width * scaleX),
+        height: Math.round(args.height * scaleY)
+      };
+      
+      loggerInstance.debug({
+        scaleX,
+        scaleY,
+        scaledRegion
+      }, 'Scaling capture region to thumbnail size');
+
+      // Use sharp to extract the region from the thumbnail
+      const croppedBuffer = await sharp(thumbnailBuffer)
+        .extract({
+          left: scaledRegion.left,
+          top: scaledRegion.top,
+          width: scaledRegion.width,
+          height: scaledRegion.height
+        })
         .png()
         .toBuffer();
-
-      const dataUrl = 'data:image/png;base64,' + croppedBuffer.toString('base64');
       
-      logger.debug('Region captured and cropped successfully', { region: region.name });
+      loggerInstance.debug({
+        originalSize: thumbnailBuffer.length,
+        croppedSize: croppedBuffer.length
+      }, 'Capture completed successfully');
       
-      return {
-        dataUrl,
-        region,
-        timestamp: Date.now(),
-        success: true
-      };
+      return new Uint8Array(croppedBuffer);
     } catch (error) {
-      logger.error('Error capturing region', { region: region.name, error });
-      
-      return {
-        dataUrl: '',
-        region,
-        timestamp: Date.now(),
-        success: false,
-        error: `Capture failed: ${error}`
-      };
+      loggerInstance.error({ error }, 'Error capturing screen region');
+      throw error;
     }
   }
   
@@ -597,10 +575,10 @@ export class ScreenCaptureService extends EventEmitter {
       // Convert the canvas back to a data URL
       const processedDataUrl = canvas.toDataURL('image/png');
       
-      logger.debug('Image preprocessed successfully');
+      loggerInstance.debug('Image preprocessed successfully');
       return processedDataUrl;
     } catch (error) {
-      logger.error('Error preprocessing image', { error });
+      loggerInstance.error('Error preprocessing image', { error });
       // Return original image if processing fails
       return dataUrl;
     }
@@ -657,7 +635,7 @@ export class ScreenCaptureService extends EventEmitter {
     const tempCtx = tempCanvas.getContext('2d');
     
     if (!tempCtx) {
-      logger.error('Failed to get temporary canvas context for sharpening');
+      loggerInstance.error('Failed to get temporary canvas context for sharpening');
       return;
     }
     
@@ -780,7 +758,7 @@ export class ScreenCaptureService extends EventEmitter {
       if (!this.hearthstoneWindowId || !this.lastWindowBounds) {
         const found = await this.findHearthstoneWindow();
         if (!found) {
-          logger.warn('Failed to find Hearthstone window for card name capture');
+          loggerInstance.warn('Failed to find Hearthstone window for card name capture');
           return [];
         }
       }
@@ -799,7 +777,7 @@ export class ScreenCaptureService extends EventEmitter {
           
           results.push(result);
         } catch (error) {
-          logger.error('Error capturing card name region', { region: region.name, error });
+          loggerInstance.error('Error capturing card name region', { region: region.name, error });
           results.push({
             dataUrl: '',
             region,
@@ -812,7 +790,7 @@ export class ScreenCaptureService extends EventEmitter {
       
       return results;
     } catch (error) {
-      logger.error('Error capturing card name regions', { error });
+      loggerInstance.error('Error capturing card name regions', { error });
       return [];
     }
   }
@@ -823,7 +801,7 @@ export class ScreenCaptureService extends EventEmitter {
   async clearManualRegions(): Promise<void> {
     await this.regionConfigService.clearConfig();
     this.manualRegions = null;
-    logger.info('Manual regions cleared');
+    loggerInstance.info('Manual regions cleared');
   }
 
   /**
@@ -841,12 +819,12 @@ export class ScreenCaptureService extends EventEmitter {
       const detection = await this.regionDetector.loadTemplateSettings();
       if (detection) {
         this.screenDetection = detection;
-        logger.info('Loaded saved screen detection');
+        loggerInstance.info('Loaded saved screen detection');
       } else {
-        logger.info('No saved screen detection found');
+        loggerInstance.info('No saved screen detection found');
       }
     } catch (error) {
-      logger.error('Error loading screen detection', { error });
+      loggerInstance.error('Error loading screen detection', { error });
     }
   }
   
@@ -858,12 +836,12 @@ export class ScreenCaptureService extends EventEmitter {
   public async detectCardRegions(): Promise<boolean> {
     // Hard stop: if we already have valid detection data, do NOT attempt screen capture
     if (this.screenDetection?.cardRegions?.length === 3) {
-      logger.info('Using saved screen regions – skipping automatic detection');
+      loggerInstance.info('Using saved screen regions – skipping automatic detection');
         return true;
       }
 
     // Existing skip-for-now behaviour
-    logger.info('Skipping automatic card region detection to prevent capture issues');
+    loggerInstance.info('Skipping automatic card region detection to prevent capture issues');
       return false;
   }
   
@@ -901,6 +879,135 @@ export class ScreenCaptureService extends EventEmitter {
     }
     
     return [];
+  }
+
+  /**
+   * Initialize the screen capture service and register IPC handlers
+   */
+  public initialize(): void {
+    this.registerIpcHandlers();
+    loggerInstance.info('Screen capture service initialized');
+  }
+
+  /**
+   * Register IPC handlers for screen capture
+   */
+  private registerIpcHandlers(): void {
+    ipcMain.handle('CAPTURE_REGION', async (_, args: ICaptureRegionArgs) => {
+      try {
+        // If args has x, y, width, height properties but no name, it's the new format
+        if (args.x !== undefined && args.y !== undefined && 
+            args.width !== undefined && args.height !== undefined && 
+            args.name === undefined) {
+          // Use the new safe capture method
+          const pngBuffer = await this.captureSafeRegion(args);
+          return pngBuffer;
+        } else {
+          // Use the original capture method for compatibility
+          return await this.captureRegion(args);
+        }
+      } catch (error) {
+        loggerInstance.error({ error }, 'Error in CAPTURE_REGION handler');
+        throw error;
+      }
+    });
+
+    loggerInstance.debug('IPC handlers registered for screen capture');
+  }
+
+  /**
+   * Captures a specific region of the screen using the new safe method
+   * Uses a safe thumbnail size to avoid Skia bitmap allocation crashes
+   * 
+   * @param args Region coordinates and dimensions
+   * @returns Promise resolving to raw PNG bytes
+   */
+  public async captureSafeRegion(args: { x: number; y: number; width: number; height: number }): Promise<Uint8Array> {
+    try {
+      // Get the primary display information
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const displayWidth = primaryDisplay.bounds.width;
+      const displayHeight = primaryDisplay.bounds.height;
+      const scaleFactor = primaryDisplay.scaleFactor;
+      
+      // Calculate safe thumbnail size (physical resolution ÷ DPI scale)
+      const thumbWidth = Math.round(displayWidth / scaleFactor);
+      const thumbHeight = Math.round(displayHeight / scaleFactor);
+      
+      loggerInstance.debug({
+        displayWidth,
+        displayHeight,
+        scaleFactor,
+        thumbWidth,
+        thumbHeight,
+        captureArgs: args
+      }, 'Requested screen capture');
+
+      // Capture the screen at the safe thumbnail size
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: {
+          width: thumbWidth,
+          height: thumbHeight
+        }
+      });
+
+      if (sources.length === 0) {
+        throw new Error('No screen sources available for capture');
+      }
+
+      // Get the primary screen source
+      const source = sources[0];
+      
+      // Get the thumbnail as NativeImage
+      const thumbnail = source.thumbnail;
+      
+      if (!thumbnail) {
+        throw new Error('Failed to capture screen thumbnail');
+      }
+
+      // Convert thumbnail to buffer for processing with sharp
+      const thumbnailBuffer = thumbnail.toPNG();
+      
+      // Calculate the scaling ratio between the thumbnail and actual display
+      const scaleX = thumbWidth / displayWidth;
+      const scaleY = thumbHeight / displayHeight;
+      
+      // Scale the requested region coordinates to match the thumbnail scale
+      const scaledRegion = {
+        left: Math.round(args.x * scaleX),
+        top: Math.round(args.y * scaleY),
+        width: Math.round(args.width * scaleX),
+        height: Math.round(args.height * scaleY)
+      };
+      
+      loggerInstance.debug({
+        scaleX,
+        scaleY,
+        scaledRegion
+      }, 'Scaling capture region to thumbnail size');
+
+      // Use sharp to extract the region from the thumbnail
+      const croppedBuffer = await sharp(thumbnailBuffer)
+        .extract({
+          left: scaledRegion.left,
+          top: scaledRegion.top,
+          width: scaledRegion.width,
+          height: scaledRegion.height
+        })
+        .png()
+        .toBuffer();
+      
+      loggerInstance.debug({
+        originalSize: thumbnailBuffer.length,
+        croppedSize: croppedBuffer.length
+      }, 'Capture completed successfully');
+      
+      return new Uint8Array(croppedBuffer);
+    } catch (error) {
+      loggerInstance.error({ error }, 'Error capturing screen region');
+      throw error;
+    }
   }
 }
 

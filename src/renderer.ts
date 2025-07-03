@@ -22,6 +22,9 @@ declare global {
       onCardsDetected: (callback: (result: DraftDetectionResult) => void) => void;
       removeAllListeners: () => void;
     };
+    desktop: {
+      captureRegion: (region: { x: number; y: number; width: number; height: number }) => Promise<Buffer>;
+    };
   }
 }
 
@@ -259,3 +262,48 @@ function updateStatus(message: string) {
   statusText.textContent = message;
   console.log(message);
 }
+
+/**
+ * Example function to test the safe capture method
+ */
+async function testSafeCapture(): Promise<void> {
+  try {
+    console.log('Testing safe capture method...');
+    
+    // Capture a small region of the screen
+    const pngBuffer = await window.desktop.captureRegion({
+      x: 100,
+      y: 100,
+      width: 320,
+      height: 180
+    });
+    
+    console.log('Capture successful, bytes:', pngBuffer.length);
+    
+    // Create a blob URL from the PNG buffer
+    const blob = new Blob([pngBuffer], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+    
+    // Display the captured image (example)
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.border = '2px solid green';
+    img.style.margin = '10px';
+    
+    // Add to the document for testing
+    const testContainer = document.getElementById('test-container');
+    if (testContainer) {
+      testContainer.appendChild(img);
+      console.log('Test image added to container');
+    } else {
+      console.log('Test container not found, image URL:', url);
+    }
+  } catch (error) {
+    console.error('Error testing safe capture:', error);
+  }
+}
+
+// Uncomment to test the safe capture method
+// window.addEventListener('DOMContentLoaded', () => {
+//   setTimeout(testSafeCapture, 2000);
+// });

@@ -29,3 +29,19 @@ contextBridge.exposeInMainWorld(
     }
   }
 );
+
+// Expose the desktop API with safe screen capture functionality
+contextBridge.exposeInMainWorld(
+  'desktop', {
+    /**
+     * Capture a specific region of the screen using the safe capture method
+     * @param {Object} args - Region coordinates and dimensions
+     * @param {number} args.x - X coordinate (left)
+     * @param {number} args.y - Y coordinate (top)
+     * @param {number} args.width - Width of region
+     * @param {number} args.height - Height of region
+     * @returns {Promise<Uint8Array>} Promise resolving to raw PNG bytes
+     */
+    captureRegion: (args) => ipcRenderer.invoke('CAPTURE_REGION', args)
+  }
+);

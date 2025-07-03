@@ -7,6 +7,18 @@ import TemplateMatcherService from './services/vision/TemplateMatcherService';
 import VisualDraftDetector from './services/draft/VisualDraftDetector';
 import RegionDetector from './services/capture/RegionDetector';
 import { buildCardHashes } from './utils/build-card-hashes';
+import pino from 'pino';
+
+// Create a pino logger instance
+const log = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true
+    }
+  }
+});
 
 /**
  * HearthGemApp
@@ -26,7 +38,7 @@ export class HearthGemApp {
   constructor() {
     // Initialize services
     this.regionDetector = new RegionDetector();
-    this.screenCaptureService = new ScreenCaptureService();
+    this.screenCaptureService = ScreenCaptureService.getInstance();
     this.imageMatcherService = new ImageMatcherService();
     this.templateMatcherService = new TemplateMatcherService();
     this.visualDraftDetector = new VisualDraftDetector(
@@ -39,6 +51,7 @@ export class HearthGemApp {
     this.setupEventListeners();
     
     logger.info('HearthGemApp initialized');
+    log.info('HearthGemApp initialized with safe capture service');
   }
   
   /**
@@ -50,8 +63,8 @@ export class HearthGemApp {
       width: 1200,
       height: 800,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        nodeIntegration: false,
+        contextIsolation: true,
         preload: path.join(__dirname, 'preload.js')
       }
     });
@@ -70,6 +83,7 @@ export class HearthGemApp {
     });
     
     logger.info('Main window created');
+    log.info('Main window created with contextIsolation enabled');
   }
   
   /**
@@ -119,6 +133,7 @@ export class HearthGemApp {
       const results = [];
       
       for (const region of regions) {
+        // Use the original capture method for compatibility
         const result = await this.screenCaptureService.captureRegion(region);
         if (result.success) {
           results.push(result);
@@ -160,8 +175,8 @@ export class HearthGemApp {
     ipcMain.handle('generateHashes', async () => {
       try {
         await buildCardHashes();
-      await this.imageMatcherService.generateAllHashes();
-      return true;
+        await this.imageMatcherService.generateAllHashes();
+        return true;
       } catch (error) {
         logger.error('Error generating hashes', { error });
         return false;
@@ -223,6 +238,7 @@ export class HearthGemApp {
       
       if (hearthstoneFound) {
         logger.info('Hearthstone window found, initializing services');
+        log.info('Hearthstone window found, initializing services with safe capture');
         
         // Check if we have card hashes
         const hasHashes = await this.imageMatcherService.hasHashes();
@@ -236,16 +252,16 @@ export class HearthGemApp {
           }
         }
         
-        // Start visual draft detection
-        // Temporarily disabled to prevent Windows capture crashes
-        // this.visualDraftDetector.startDetection();
-        logger.info('All visual detection disabled due to Windows capture restrictions');
-        logger.info('App running in bypass mode - only hash database and UI available');
+        // Start visual draft detection with safe capture
+        log.info('Visual detection enabled with safe capture method');
+        this.visualDraftDetector.startDetection();
       } else {
         logger.warn('Hearthstone window not found, services will initialize when window is found');
+        log.warn('Hearthstone window not found, services will initialize when window is found');
       }
     } catch (error) {
       logger.error('Error initializing services', { error });
+      log.error({ error }, 'Error initializing services');
     }
   }
 }

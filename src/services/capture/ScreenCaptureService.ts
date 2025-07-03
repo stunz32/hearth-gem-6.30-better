@@ -345,10 +345,9 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
    * Get capture regions for card detection
    */
   async getCaptureRegions(): Promise<CaptureRegion[]> {
-    // Completely disable automatic capture to prevent Windows capture crashes
-    loggerInstance.info('Automatic capture disabled - using saved settings only');
-    
+    // Prefer saved screen-detection results if available
     if (this.screenDetection && this.screenDetection.cardRegions.length === 3) {
+      loggerInstance.info('Using saved screen regions – skipping automatic detection');
       return this.screenDetection.cardRegions.map((region, index) => ({
         x: region.x,
         y: region.y,
@@ -357,9 +356,23 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
         name: `card${index + 1}`
       }));
     }
-    
-    loggerInstance.warn('No saved screen detection available');
-    return [];
+
+    // Fall back to built-in heuristic regions so the user can at least capture something.
+    loggerInstance.warn('No saved screen detection available – falling back to heuristic regions');
+    const fallback = this.getAutomaticCaptureRegions();
+    // Attempt to persist these as the current manual regions for future runs
+    try {
+      await this.updateManualRegions(fallback.map((r, i) => ({
+        cardIndex: i,
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height
+      })));
+    } catch (err) {
+      loggerInstance.error('Failed to save fallback regions', { err });
+    }
+    return fallback;
   }
   
   /**

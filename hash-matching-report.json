@@ -1,0 +1,65 @@
+[
+  {
+    "fileName": "card1_1751623197735.png",
+    "cardId": "AT_084_premium",
+    "confidence": 0.15625,
+    "capturedHash": "000033fc3dfe0f7c1efc1c8e100c1ffc08801f7c1ffc1dd83fff1ff780270000",
+    "bestMatchHash": "fffffc3f80010001de0ff087e007e00fd8c3cf9bc007dc03c003a007b007ffff"
+  },
+  {
+    "fileName": "card1_1751623777916.png",
+    "cardId": "EX1_096",
+    "confidence": 0.171875,
+    "capturedHash": "01e071d66b7a0ef83c9c210e20dc3ffc10803ffc360c3ff87fff7fff00010000",
+    "bestMatchHash": "fffffc7f00010001c3f3c1f3c0c3c0638003808387fb9ffb80038ff18001ffff"
+  },
+  {
+    "fileName": "card1_1751623887741.png",
+    "cardId": "AV_108_premium",
+    "confidence": 0.171875,
+    "capturedHash": "000001f037fe7ffe717a0f782eec24983c9e298e300e38fe0ffc1fc808081ffc",
+    "bestMatchHash": "ffff8fff0001000181799de781e18da1dffb8083c007e887a003c003e00fffff"
+  },
+  {
+    "fileName": "card2_1751623197736.png",
+    "cardId": "RLK_542_premium",
+    "confidence": 0.140625,
+    "capturedHash": "000003c87fee7ffc783468166c047ffc1cf83ffc21c43838ffff7fff00000000",
+    "bestMatchHash": "ffffde3f800180008871d819de099fc9dff9c1f9c001ce018001b013f007ffff"
+  },
+  {
+    "fileName": "card2_1751623777916.png",
+    "cardId": "ULD_193_premium",
+    "confidence": 0.171875,
+    "capturedHash": "000003f47fee2ffc3c1c381e2c063ffc1eb83ffc20043e6c7fff7fff00020000",
+    "bestMatchHash": "fffffc3f80010001dc1ff807e007e00fd8bbcff3c007c003c003d003d00bffff"
+  },
+  {
+    "fileName": "card2_1751623887741.png",
+    "cardId": "AV_257_premium",
+    "confidence": 0.140625,
+    "capturedHash": "fcba000003f877fe77e807f43cd43c10381e2c1e3c0e3ef80ff80c902f7c23f4",
+    "bestMatchHash": "fffffc0f800081c087e197b1a027a363d783c393c003ced380038001a775ffff"
+  },
+  {
+    "fileName": "card3_1751623197736.png",
+    "cardId": "DMF_002",
+    "confidence": 0.125,
+    "capturedHash": "000001e077fe7ffe3db43b042e243df80c381f7c03f43dd8ffff7fff00000000",
+    "bestMatchHash": "fffffc1f80018001c9a9ccf3ce23c403803380839ffb91db90038df18001ffff"
+  },
+  {
+    "fileName": "card3_1751623777917.png",
+    "cardId": "CS2_088",
+    "confidence": 0.125,
+    "capturedHash": "000023e87ff47fec6d606f0c0e6c35f81db01efc07f83198fffefffe00040000",
+    "bestMatchHash": "ffffde7f000100018e0baf0b8167876380e3800387fb9e7b8003adf18001ffff"
+  },
+  {
+    "fileName": "card3_1751623887741.png",
+    "cardId": "EDR_031",
+    "confidence": 0.15625,
+    "capturedHash": "ff00000027f87ffe77c807ec3da02b343f0c0eac36203ff80df800303ffc07fc",
+    "bestMatchHash": "fffffe1f80018000c7c1c1e3c443c5e3c423cea3c023d3bb900b801bc00bffff"
+  }
+]

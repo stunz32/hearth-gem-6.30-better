@@ -3,12 +3,12 @@ import { getLogger } from '../../utils/logger';
 
 // Create logger instance for this module
 const logger = getLogger('src/services/draft/VisualDraftDetector');
-import ScreenCaptureService, { CaptureRegion, CaptureResult } from '../capture/ScreenCaptureService';
-import ImageMatcherService from '../vision/ImageMatcherService';
-import TemplateMatcherService from '../vision/TemplateMatcherService';
+import { ScreenCaptureService, CaptureRegion } from '../capture/ScreenCaptureService';
+import { ImageMatcherService } from '../vision/ImageMatcherService';
+import { TemplateMatcherService } from '../vision/TemplateMatcherService';
 
 /**
- * Interface for a detected card
+ * Interface for detected card information
  */
 export interface DetectedCard {
   cardIndex: number;
@@ -28,8 +28,17 @@ export interface DraftDetectionResult {
 }
 
 /**
- * VisualDraftDetector
- * Detects cards in the Hearthstone draft using computer vision
+ * Interface for capture cache entry
+ */
+interface CaptureCache {
+  dataUrl: string;
+  timestamp: number;
+  hash: string;
+}
+
+/**
+ * VisualDraftDetector - detects cards in draft interface
+ * Enhanced with performance optimizations and advanced preprocessing
  */
 export class VisualDraftDetector extends EventEmitter {
   private screenCaptureService: ScreenCaptureService;
@@ -38,14 +47,22 @@ export class VisualDraftDetector extends EventEmitter {
   private detectionInterval: NodeJS.Timeout | null = null;
   private detectionInProgress = false;
   private lastDetectionResult: DraftDetectionResult | null = null;
-  private detectionIntervalMs = 2000; // Default to 2 seconds
-  private confidenceThreshold = 0.7; // Minimum confidence for a valid detection
+  private detectionIntervalMs = 1500; // Optimized: reduced from 2000ms to 1500ms
+  private confidenceThreshold = 0.6; // Lowered to match new ImageMatcher threshold
+  
+  // Performance optimization: capture caching
+  private captureCache = new Map<string, CaptureCache>();
+  private readonly CACHE_DURATION_MS = 500; // Cache captures for 500ms
+  private readonly CACHE_MAX_SIZE = 10;
+  
+  // Performance optimization: debouncing and throttling
+  private lastCaptureTime = 0;
+  private readonly MIN_CAPTURE_INTERVAL = 300; // Minimum 300ms between captures
+  private consecutiveFailures = 0;
+  private readonly MAX_CONSECUTIVE_FAILURES = 3;
   
   /**
    * Creates a new VisualDraftDetector instance
-   * @param screenCaptureService Screen capture service
-   * @param imageMatcherService Image matcher service
-   * @param templateMatcherService Template matcher service
    */
   constructor(
     screenCaptureService: ScreenCaptureService,
@@ -56,79 +73,176 @@ export class VisualDraftDetector extends EventEmitter {
     this.screenCaptureService = screenCaptureService;
     this.imageMatcherService = imageMatcherService;
     this.templateMatcherService = templateMatcherService;
-    
-    logger.info('VisualDraftDetector initialized');
   }
-  
+
   /**
-   * Start detecting cards
-   * @param intervalMs Optional interval in milliseconds
+   * Start automated card detection
+   * @param intervalMs Optional interval in milliseconds (default: 1500ms)
    */
   public startDetection(intervalMs?: number): void {
-    // Test if screen capture is available before starting detection
-    this.testScreenCapture().then(isAvailable => {
-      if (!isAvailable) {
-        logger.warn('Screen capture not available, detection disabled until capture is fixed');
-        return;
+    if (this.detectionInterval) {
+      logger.warn('Detection already running');
+      return;
+    }
+
+    if (intervalMs && intervalMs > 0) {
+      this.detectionIntervalMs = intervalMs;
+    }
+
+    logger.info('Starting visual card detection', { intervalMs: this.detectionIntervalMs });
+
+    // Test screen capture availability first
+    this.testScreenCapture().then((available) => {
+      if (available) {
+        this.startDetectionInternal(this.detectionIntervalMs);
+      } else {
+        logger.error('Screen capture not available - cannot start detection');
       }
-      
-      this.startDetectionInternal(intervalMs);
-    }).catch(error => {
-      logger.error('Error testing screen capture, detection disabled', { error });
     });
   }
-  
+
   /**
    * Test if screen capture is available
    */
   private async testScreenCapture(): Promise<boolean> {
     try {
-      const testSources = await (await import('electron')).desktopCapturer.getSources({
+      const { desktopCapturer } = await import('electron');
+      const sources = await desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: { width: 1, height: 1 }
       });
-      
-      return testSources.length > 0;
+      return sources.length > 0;
     } catch (error) {
-      logger.debug('Screen capture test failed', { error });
+      logger.error('Screen capture test failed', { error });
       return false;
     }
   }
-  
+
   /**
-   * Internal method to actually start detection
+   * Start the detection interval
    */
   private startDetectionInternal(intervalMs?: number): void {
-    if (this.detectionInterval) {
-      this.stopDetection();
-    }
-    
-    if (intervalMs) {
-      this.detectionIntervalMs = intervalMs;
-    }
-    
-    logger.info('Starting visual draft detection', { intervalMs: this.detectionIntervalMs });
-    
-    // Run detection immediately
-    this.detectCards();
-    
-    // Then set up interval
-    this.detectionInterval = setInterval(() => {
-      this.detectCards();
-    }, this.detectionIntervalMs);
+    this.detectionInterval = setInterval(async () => {
+      try {
+        const now = Date.now();
+        
+        // Performance optimization: throttle captures
+        if (now - this.lastCaptureTime < this.MIN_CAPTURE_INTERVAL) {
+          return;
+        }
+        
+        // Performance optimization: back off on consecutive failures
+        if (this.consecutiveFailures >= this.MAX_CONSECUTIVE_FAILURES) {
+          this.detectionIntervalMs = Math.min(this.detectionIntervalMs * 1.5, 5000);
+          logger.debug('Backing off detection interval due to failures', { 
+            newInterval: this.detectionIntervalMs 
+          });
+        }
+        
+        this.lastCaptureTime = now;
+        await this.detectCards();
+      } catch (error) {
+        logger.error('Error in detection interval', { error });
+      }
+    }, intervalMs || this.detectionIntervalMs);
   }
-  
+
   /**
-   * Stop detecting cards
+   * Stop automated card detection
    */
   public stopDetection(): void {
     if (this.detectionInterval) {
       clearInterval(this.detectionInterval);
       this.detectionInterval = null;
-      logger.info('Stopped visual draft detection');
+      logger.info('Stopped visual card detection');
     }
   }
-  
+
+  /**
+   * Get cached capture if available and valid
+   * @param regionKey Unique key for the region
+   * @returns Cached capture data or null
+   */
+  private getCachedCapture(regionKey: string): string | null {
+    const cached = this.captureCache.get(regionKey);
+    if (!cached) return null;
+    
+    const isExpired = Date.now() - cached.timestamp > this.CACHE_DURATION_MS;
+    if (isExpired) {
+      this.captureCache.delete(regionKey);
+      return null;
+    }
+    
+    return cached.dataUrl;
+  }
+
+  /**
+   * Cache a capture result
+   * @param regionKey Unique key for the region
+   * @param dataUrl Captured image data URL
+   */
+  private setCachedCapture(regionKey: string, dataUrl: string): void {
+    // Simple hash for change detection
+    const hash = this.simpleHash(dataUrl);
+    
+    this.captureCache.set(regionKey, {
+      dataUrl,
+      timestamp: Date.now(),
+      hash
+    });
+    
+    // Cleanup old cache entries
+    if (this.captureCache.size > this.CACHE_MAX_SIZE) {
+      const oldestKey = this.captureCache.keys().next().value;
+      this.captureCache.delete(oldestKey);
+    }
+  }
+
+  /**
+   * Simple hash function for change detection
+   * @param str String to hash
+   * @returns Simple hash
+   */
+  private simpleHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return hash.toString(36);
+  }
+
+  /**
+   * Optimized region capture with caching
+   * @param region Region to capture
+   * @returns Promise resolving to capture result
+   */
+  private async optimizedCaptureRegion(region: CaptureRegion): Promise<any> {
+    const regionKey = `${region.name}_${region.x}_${region.y}_${region.width}_${region.height}`;
+    
+    // Check cache first
+    const cached = this.getCachedCapture(regionKey);
+    if (cached) {
+      logger.debug('Using cached capture', { region: region.name });
+      return {
+        success: true,
+        dataUrl: cached,
+        region
+      };
+    }
+    
+    // Capture new image
+    const result = await this.screenCaptureService.captureRegion(region);
+    
+    // Cache successful captures
+    if (result.success && result.dataUrl) {
+      this.setCachedCapture(regionKey, result.dataUrl);
+    }
+    
+    return result;
+  }
+
   /**
    * Detect cards in the current screen
    * @returns Promise resolving to detection result
@@ -240,7 +354,7 @@ export class VisualDraftDetector extends EventEmitter {
           const cardIndex = cardIndexMatch ? parseInt(cardIndexMatch[1]) : i + 1;
           
           // Use fast-hash image matching as primary detection method
-          const imageMatch = await this.imageMatcherService.matchCardImage(result.dataUrl);
+          const imageMatch = await this.imageMatcherService.matchCardImage(result.dataUrl!);
           
           // Additional verification with mana cost and rarity if available
           const manaMatch = i < manaResults.length && manaResults[i].success && manaResults[i].dataUrl

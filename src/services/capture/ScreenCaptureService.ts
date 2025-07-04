@@ -581,7 +581,7 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
   }
   
   /**
-   * Preprocess an image to improve OCR accuracy
+   * Preprocess an image to improve hash matching accuracy using Sharp
    * @param dataUrl Image data URL to process
    * @param options Preprocessing options
    * @returns Promise resolving to processed image data URL
@@ -589,232 +589,170 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
    */
   private async preprocessImage(dataUrl: string, options: PreprocessingOptions = this.defaultPreprocessingOptions): Promise<string> {
     try {
-      // Create an image element to load the data URL
-      const img = new Image();
+      // Convert data URL to buffer
+      const base64Data = dataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
+      const inputBuffer = Buffer.from(base64Data, 'base64');
       
-      // Create a promise that resolves when the image loads
-      const imageLoaded = new Promise<HTMLImageElement>((resolve, reject) => {
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(err);
-        img.src = dataUrl;
+      // Create sharp instance for high-performance processing
+      let sharpInstance = sharp(inputBuffer);
+      
+      // Get image metadata for intelligent processing
+      const metadata = await sharpInstance.metadata();
+      const { width = 0, height = 0 } = metadata;
+      
+      logger.debug('Preprocessing image', { 
+        originalSize: `${width}x${height}`,
+        options 
       });
       
-      // Wait for the image to load
-      const loadedImg = await imageLoaded;
-      
-      // Create a canvas to process the image
-      const canvas = document.createElement('canvas');
-      
-      // Scale up if requested (helps OCR with small text)
-      let width = loadedImg.width;
-      let height = loadedImg.height;
-      
-      if (options.scaleUp) {
-        width *= options.scaleUpFactor;
-        height *= options.scaleUpFactor;
+      // Step 1: Smart scaling for better feature detection
+      if (options.scaleUp && (width < 200 || height < 200)) {
+        const scaleFactor = Math.max(options.scaleUpFactor, 2);
+        sharpInstance = sharpInstance.resize(
+          Math.round(width * scaleFactor), 
+          Math.round(height * scaleFactor),
+          { 
+            kernel: sharp.kernel.lanczos3,  // High-quality resampling
+            withoutEnlargement: false 
+          }
+        );
+        logger.debug(`Upscaled image by ${scaleFactor}x for better feature detection`);
       }
       
-      canvas.width = width;
-      canvas.height = height;
+      // Step 2: Advanced noise reduction and edge preservation
+      sharpInstance = sharpInstance.median(3); // Remove noise while preserving edges
       
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-      
-      // Draw the image on the canvas with scaling if needed
-      ctx.drawImage(loadedImg, 0, 0, width, height);
-      
-      // Get image data for processing
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const data = imageData.data;
-      
-      // Apply image processing
+      // Step 3: Intelligent contrast enhancement
       if (options.enhanceContrast) {
-        this.enhanceContrast(data);
+        // Normalize to improve dynamic range
+        sharpInstance = sharpInstance.normalize();
+        
+        // Apply gamma correction for better midtone contrast
+        sharpInstance = sharpInstance.gamma(1.2);
+        
+        // Enhance local contrast
+        sharpInstance = sharpInstance.clahe({
+          width: Math.max(8, Math.floor(width / 16)),
+          height: Math.max(8, Math.floor(height / 16)),
+          maxSlope: 3
+        });
       }
       
+      // Step 4: Smart sharpening for hash matching
       if (options.sharpen) {
-        this.sharpenImage(ctx, imageData);
+        // Use unsharp mask for controlled sharpening
+        sharpInstance = sharpInstance.sharpen({
+          sigma: 1.0,      // Controls blur radius
+          m1: 1.0,         // Flat areas threshold
+          m2: 2.0,         // Jagged areas threshold  
+          x1: 2.0,         // Flat areas gain
+          y2: 10.0,        // Jagged areas gain
+          y3: 20.0         // Maximum gain
+        });
       }
       
+      // Step 5: Convert to grayscale for better hash consistency
+      sharpInstance = sharpInstance.grayscale();
+      
+      // Step 6: Apply histogram equalization for consistent lighting
+      sharpInstance = sharpInstance.linear(1.1, -10); // Slight contrast boost
+      
+      // Step 7: Optional binarization for extreme cases
       if (options.binarize) {
-        this.binarizeImage(data);
+        sharpInstance = sharpInstance.threshold(128, { grayscale: false });
       }
       
-      // Put the processed image data back on the canvas
-      ctx.putImageData(imageData, 0, 0);
+      // Process the image
+      const processedBuffer = await sharpInstance
+        .png({ quality: 100, compressionLevel: 0 }) // Lossless for hash matching
+        .toBuffer();
       
-      // Convert the canvas back to a data URL
-      const processedDataUrl = canvas.toDataURL('image/png');
+      // Convert back to data URL
+      const processedDataUrl = `data:image/png;base64,${processedBuffer.toString('base64')}`;
       
-      logger.debug('Image preprocessed successfully');
+      logger.debug('Image preprocessed successfully with Sharp', {
+        inputSize: inputBuffer.length,
+        outputSize: processedBuffer.length,
+        processingSteps: [
+          options.scaleUp && 'upscaling',
+          'noise_reduction',
+          options.enhanceContrast && 'contrast_enhancement', 
+          options.sharpen && 'sharpening',
+          'grayscale_conversion',
+          'histogram_equalization',
+          options.binarize && 'binarization'
+        ].filter(Boolean)
+      });
+      
       return processedDataUrl;
-    } catch (error:any) {
-      logger.error('Error preprocessing image', { message: error?.message, stack: error?.stack });
-      throw error;
+      
+    } catch (error: any) {
+      logger.error('Error preprocessing image with Sharp', { 
+        message: error?.message, 
+        stack: error?.stack 
+      });
+      // Return original on error to maintain functionality
+      return dataUrl;
     }
   }
   
   /**
-   * Enhance contrast in an image
-   * @param data Image data array
+   * Advanced preprocessing specifically optimized for hash matching
+   * @param dataUrl Image data URL to process  
+   * @returns Promise resolving to optimized image data URL
    * @private
    */
-  private enhanceContrast(data: Uint8ClampedArray): void {
-    // Find min and max values for auto-contrast
-    let min = 255;
-    let max = 0;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
+  private async preprocessForHashMatching(dataUrl: string): Promise<string> {
+    try {
+      const base64Data = dataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
+      const inputBuffer = Buffer.from(base64Data, 'base64');
       
-      // Convert to grayscale using luminance formula
-      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      const metadata = await sharp(inputBuffer).metadata();
+      const { width = 0, height = 0 } = metadata;
       
-      if (gray < min) min = gray;
-      if (gray > max) max = gray;
+      // Multi-pass optimization for maximum hash matching accuracy
+      const processedBuffer = await sharp(inputBuffer)
+        // Pass 1: Intelligent upscaling if image is too small
+        .resize(
+          width < 150 ? width * 3 : width,
+          height < 150 ? height * 3 : height, 
+          { 
+            kernel: sharp.kernel.lanczos3,
+            withoutEnlargement: false
+          }
+        )
+        // Pass 2: Aggressive noise reduction
+        .median(5)
+        .blur(0.3)
+        .sharpen({ sigma: 1.5, m1: 0.5, m2: 3.0, x1: 3.0, y2: 15.0, y3: 25.0 })
+        // Pass 3: Extreme contrast optimization  
+        .normalize()
+        .gamma(1.3)
+        .linear(1.2, -15)
+        // Pass 4: Convert to grayscale for consistent hashing
+        .grayscale()
+        // Pass 5: Final histogram equalization
+        .clahe({ width: 8, height: 8, maxSlope: 4 })
+        // Export as high-quality PNG
+        .png({ quality: 100, compressionLevel: 0 })
+        .toBuffer();
+      
+      const optimizedDataUrl = `data:image/png;base64,${processedBuffer.toString('base64')}`;
+      
+      logger.debug('Advanced hash matching preprocessing completed', {
+        originalSize: `${width}x${height}`,
+        finalSize: processedBuffer.length,
+        optimization: 'maximum_hash_accuracy'
+      });
+      
+      return optimizedDataUrl;
+      
+    } catch (error: any) {
+      logger.error('Error in advanced hash preprocessing', { 
+        message: error?.message 
+      });
+      return dataUrl;
     }
-    
-    // Skip if there's no range to adjust
-    if (min === max) return;
-    
-    // Apply contrast stretching
-    const range = max - min;
-    for (let i = 0; i < data.length; i += 4) {
-      for (let j = 0; j < 3; j++) {
-        // Stretch each color channel
-        data[i + j] = Math.min(255, Math.max(0, 
-          Math.round(((data[i + j] - min) / range) * 255)
-        ));
-      }
-    }
-  }
-  
-  /**
-   * Sharpen an image using a convolution kernel
-   * @param ctx Canvas context
-   * @param imageData Image data
-   * @private
-   */
-  private sharpenImage(ctx: CanvasRenderingContext2D, imageData: ImageData): void {
-    // Create a temporary canvas for the sharpening operation
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = imageData.width;
-    tempCanvas.height = imageData.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    if (!tempCtx) {
-      logger.error('Failed to get temporary canvas context for sharpening');
-      return;
-    }
-    
-    // Put the original image data on the temporary canvas
-    tempCtx.putImageData(imageData, 0, 0);
-    
-    // Apply a sharpening filter using a convolution
-    ctx.save();
-    ctx.drawImage(tempCanvas, 0, 0);
-    ctx.globalAlpha = 0.5; // Adjust strength of sharpening
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.drawImage(tempCanvas, 0, 0);
-    ctx.restore();
-    
-    // Get the sharpened image data
-    const sharpenedData = ctx.getImageData(0, 0, imageData.width, imageData.height);
-    
-    // Copy the sharpened data back to the original imageData
-    for (let i = 0; i < imageData.data.length; i++) {
-      imageData.data[i] = sharpenedData.data[i];
-    }
-  }
-  
-  /**
-   * Binarize an image (convert to black and white)
-   * @param data Image data array
-   * @private
-   */
-  private binarizeImage(data: Uint8ClampedArray): void {
-    // Use Otsu's method to find optimal threshold
-    const threshold = this.calculateOtsuThreshold(data);
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      
-      // Convert to grayscale using luminance formula
-      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-      
-      // Apply threshold
-      const value = gray < threshold ? 0 : 255;
-      
-      // Set RGB channels to the same value (black or white)
-      data[i] = value;     // R
-      data[i + 1] = value; // G
-      data[i + 2] = value; // B
-      // Alpha channel remains unchanged
-    }
-  }
-  
-  /**
-   * Calculate optimal threshold using Otsu's method
-   * @param data Image data array
-   * @returns Optimal threshold value
-   * @private
-   */
-  private calculateOtsuThreshold(data: Uint8ClampedArray): number {
-    // Create histogram
-    const histogram = new Array(256).fill(0);
-    let pixelCount = 0;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      
-      // Convert to grayscale
-      const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-      histogram[gray]++;
-      pixelCount++;
-    }
-    
-    // Calculate sum and mean
-    let sum = 0;
-    for (let i = 0; i < 256; i++) {
-      sum += i * histogram[i];
-    }
-    
-    let sumB = 0;
-    let wB = 0;
-    let wF = 0;
-    let maxVariance = 0;
-    let threshold = 0;
-    
-    for (let t = 0; t < 256; t++) {
-      wB += histogram[t];
-      if (wB === 0) continue;
-      
-      wF = pixelCount - wB;
-      if (wF === 0) break;
-      
-      sumB += t * histogram[t];
-      
-      const mB = sumB / wB;
-      const mF = (sum - sumB) / wF;
-      
-      // Calculate between-class variance
-      const variance = wB * wF * (mB - mF) * (mB - mF);
-      
-      if (variance > maxVariance) {
-        maxVariance = variance;
-        threshold = t;
-      }
-    }
-    
-    return threshold;
   }
   
   /**

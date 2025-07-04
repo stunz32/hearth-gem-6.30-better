@@ -97,13 +97,13 @@ export class RegionDetector extends EventEmitter {
         return true;
       }
       
-      // If we couldn't find the window, we'll fall back to using the primary screen
-      logger.info('Hearthstone window not found by name. Assuming it\'s running on the primary display.');
-      return true;
+      // If we couldn't find the window, don't lie about it
+      logger.warn('[RegionDetector] Hearthstone window not found');
+      return false;
     } catch (error) {
       logger.error('Error finding Hearthstone window', { error });
-      // Return true as a fallback - we'll use the primary display
-      return true;
+      // Return false when we can't detect the window
+      return false;
     }
   }
   

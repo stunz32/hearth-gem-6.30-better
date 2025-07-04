@@ -1,9 +1,13 @@
 // Import types
 import type { DraftDetectionResult } from './services/draft/VisualDraftDetector';
-import { getLogger } from './utils/logger';
 
-// Create logger instance for this module
-const logger = getLogger('renderer');
+// Use console for logging in renderer since we can't import modules directly
+const logger = {
+  debug: (...args: any[]) => console.log('[renderer]', ...args),
+  info: (...args: any[]) => console.log('[renderer]', ...args),
+  error: (...args: any[]) => console.error('[renderer]', ...args),
+  warn: (...args: any[]) => console.warn('[renderer]', ...args)
+};
 
 // DOM elements
 let findHearthstoneBtn: HTMLButtonElement;

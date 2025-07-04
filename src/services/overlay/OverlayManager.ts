@@ -1,10 +1,10 @@
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, screen, app } from 'electron';
 import path from 'path';
 import { getLogger } from '../../utils/logger';
+import { Card } from '../cardData/CardDataService';
 
 // Create logger instance for this module
 const logger = getLogger('services/overlay/OverlayManager');
-import { Card } from '../cardData/CardDataService';
 
 /**
  * Interface for overlay position
@@ -64,7 +64,7 @@ export class OverlayManager {
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
-          preload: path.join(__dirname, '../../../src/preload.js')
+          preload: path.join(app.getAppPath(), 'dist', 'preload.js')
         }
       });
       

@@ -1,18 +1,10 @@
 import { ipcMain, screen } from 'electron';
 import { ScreenCaptureService } from '../services/capture/ScreenCaptureService';
 import { ICaptureRegionArgs } from '../types/capture';
-import pino from 'pino';
+import logger from '../utils/logger';
 
-// Create a logger instance
-const log = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true
-    }
-  }
-});
+// Use the winston logger from utils
+const log = logger;
 
 /**
  * Initialize the capture handler

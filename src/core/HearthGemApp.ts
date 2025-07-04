@@ -1,7 +1,6 @@
 import { ipcMain, BrowserWindow, screen } from 'electron';
 import path from 'path';
 import { getLogger } from '../utils/logger';
-import LogWatcher from '../services/logReader/LogWatcher';
 import ArenaDraftDetector, { DraftState, CardData } from '../services/logReader/ArenaDraftDetector';
 import CardDataService, { Card } from '../services/cardData/CardDataService';
 import CardMatcher from '../services/cardData/CardMatcher';
@@ -20,7 +19,6 @@ import RegionSelectionController from '../controllers/RegionSelectionController'
  * @module HearthGemApp
  */
 export class HearthGemApp {
-  private logWatcher: LogWatcher;
   private screenCapture: ScreenCaptureService;
   private ocrService: OCRService;
   private cardMatcher: CardMatcher;
@@ -49,7 +47,6 @@ export class HearthGemApp {
     this.log.info('Starting HearthGem Arena Assistant');
     
     // Initialize services
-    this.logWatcher = new LogWatcher();
     this.screenCapture = ScreenCaptureService.getInstance();
     // Initialize screen capture (registers IPC handlers like captureRegions, detectCardRegions)
     this.screenCapture.initialize();
@@ -62,7 +59,7 @@ export class HearthGemApp {
     
     // ImageMatcher will be initialized after CardDataService is loaded
     this.draftDetector = new ArenaDraftDetector(
-      this.logWatcher,
+      undefined, // logWatcher - will create a new one
       undefined, // Will set visualDetector after initialization
       this.useVisualDetection
     );
@@ -130,7 +127,7 @@ export class HearthGemApp {
       const sampleCards = await this.cardDataService.getSampleCards(3);
       if (sampleCards.length > 0) {
         this.log.info('Displaying sample cards:', { cards: sampleCards.map(c => c.name) });
-        this.overlayManager.displayCards(sampleCards);
+      this.overlayManager.displayCards(sampleCards);
       } else {
         this.log.warn('No sample cards available to display');
       }
@@ -163,9 +160,7 @@ export class HearthGemApp {
         this.draftDetector.stop();
       }
 
-      if (this.logWatcher) {
-        this.logWatcher.stop();
-      }
+      // LogWatcher is now managed by ArenaDraftDetector
 
       if (this.visualDetector) {
         this.visualDetector.stop();

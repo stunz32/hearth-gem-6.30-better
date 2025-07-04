@@ -1,4 +1,5 @@
-import { BrowserWindow, screen, ipcMain } from 'electron';
+import { BrowserWindow, screen, ipcMain, app } from 'electron';
+import path from 'path';
 import { getLogger } from '../../utils/logger';
 
 // Create logger instance for this module
@@ -58,13 +59,15 @@ export class RegionSelector {
       minimizable: false,
       maximizable: false,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(app.getAppPath(), 'dist', 'preload.js')
       }
     });
 
-    // Load the region selector HTML
-    this.selectorWindow.loadFile('src/region-selector.html');
+    // Use absolute path based on the app root to avoid path resolution issues when running from the compiled dist folder
+    const selectorHtmlPath = path.join(app.getAppPath(), 'src', 'region-selector.html');
+    this.selectorWindow.loadFile(selectorHtmlPath);
 
     this.selectorWindow.on('closed', () => {
       this.selectorWindow = null;

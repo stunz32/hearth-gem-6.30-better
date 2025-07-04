@@ -154,8 +154,9 @@
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-
+        // Use window.api instead of requiring electron directly
+        // This works with contextIsolation: true and nodeIntegration: false
+        
         class RegionSelectorRenderer {
             constructor() {
                 this.canvas = document.getElementById('canvas');
@@ -172,8 +173,8 @@
             }
 
             initializeCanvas() {
-                // Set canvas size to full screen
-                ipcRenderer.on('screen-dimensions', (_, dimensions) => {
+                // Set canvas size to full screen using the exposed API
+                window.api.onScreenDimensions((dimensions) => {
                     this.canvas.width = dimensions.width;
                     this.canvas.height = dimensions.height;
                     this.redraw();
@@ -344,7 +345,7 @@
                 }
 
                 try {
-                    await ipcRenderer.invoke('region-selection-complete', this.regions);
+                    await window.api.regionSelectionComplete(this.regions);
                 } catch (error) {
                     console.error('Error saving regions:', error);
                     alert('Error saving regions. Please try again.');
@@ -353,7 +354,7 @@
 
             async cancel() {
                 try {
-                    await ipcRenderer.invoke('region-selection-cancel');
+                    await window.api.regionSelectionCancel();
                 } catch (error) {
                     console.error('Error cancelling selection:', error);
                 }

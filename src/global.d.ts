@@ -3,6 +3,15 @@ import { ICaptureRegionArgs, CaptureRegionResult, CaptureRegion } from './types/
 declare global {
   interface Window {
     api: {
+      /**
+       * Invoke a main-process handler and return a Promise.
+       * @param channel – IPC channel name
+       * @param args    – JSON-serialisable arguments
+       * @returns Promise<any> – value resolved by main-process handler
+       */
+      invoke(channel: string, ...args: any[]): Promise<any>;
+      
+      // Specific IPC methods for HearthGem
       findHearthstoneWindow: () => Promise<boolean>;
       captureRegions: () => Promise<any[]>;
       detectCards: () => Promise<any>;
@@ -16,13 +25,8 @@ declare global {
       addRarityTemplate: (imageData: string, cardId: string) => Promise<boolean>;
       detectCardRegions: () => Promise<any>;
       
-      // Generic IPC invoke method for additional handlers
-      invoke: (channel: string, ...args: any[]) => Promise<any>;
-      
       // Event listeners
       onCardsDetected: (callback: (result: any) => void) => void;
-      
-      // Remove event listeners
       removeAllListeners: () => void;
     };
     

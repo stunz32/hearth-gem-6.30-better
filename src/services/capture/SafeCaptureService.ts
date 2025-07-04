@@ -1,18 +1,10 @@
 import { desktopCapturer, screen, ipcMain } from 'electron';
 import { ICaptureRegionArgs, CaptureRegionResult, IScreenCaptureService, CaptureRegion, CaptureResult } from '../../types/capture';
 import sharp from 'sharp';
-import pino from 'pino';
+import logger from '../../utils/logger';
 
-// Create a logger instance
-const log = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true
-    }
-  }
-});
+// Use the winston logger from utils
+const log = logger;
 
 /**
  * Service for capturing screen regions safely
@@ -74,14 +66,14 @@ export class SafeCaptureService implements IScreenCaptureService {
       const thumbWidth = Math.round(displayWidth / scaleFactor);
       const thumbHeight = Math.round(displayHeight / scaleFactor);
       
-      log.debug({
+      log.debug('Requested capture', {
         displayWidth,
         displayHeight,
         scaleFactor,
         thumbWidth,
         thumbHeight,
         args
-      }, 'Requested capture');
+      });
       
       // If the region is outside the primary display, find the correct display
       let targetDisplay = primaryDisplay;
@@ -90,10 +82,10 @@ export class SafeCaptureService implements IScreenCaptureService {
         const nearestDisplay = screen.getDisplayNearestPoint(point);
         if (nearestDisplay.id !== primaryDisplay.id) {
           targetDisplay = nearestDisplay;
-          log.debug({
+          log.debug('Using non-primary display for capture', {
             displayId: targetDisplay.id,
             bounds: targetDisplay.bounds
-          }, 'Using non-primary display for capture');
+          });
         }
       }
 
@@ -157,11 +149,11 @@ export class SafeCaptureService implements IScreenCaptureService {
         height: Math.round(args.height * scaleY)
       };
       
-      log.debug({
+      log.debug('Scaling capture region to thumbnail size', {
         scaleX,
         scaleY,
         scaledRegion
-      }, 'Scaling capture region to thumbnail size');
+      });
 
       // Use sharp to extract the region from the thumbnail
       const croppedBuffer = await sharp(thumbnailBuffer)
@@ -190,15 +182,15 @@ export class SafeCaptureService implements IScreenCaptureService {
         result.region = args as CaptureRegion;
       }
       
-      log.debug({
+      log.debug('Capture completed', {
         bytes: croppedBuffer.length
-      }, 'Capture completed');
+      });
       
       return result;
     } catch (error) {
-      log.error({
+      log.error('Error in captureRegion', {
         error
-      }, 'Error in captureRegion');
+      });
       
       // Return a compatible error result
       const errorResult = new Uint8Array(0) as CaptureRegionResult;

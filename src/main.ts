@@ -43,8 +43,8 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   log.info('All windows closed');
   if (process.platform !== 'darwin') {
-    app.quit();
-  }
+      app.quit();
+    }
 });
 
 app.on('activate', () => {
@@ -52,7 +52,7 @@ app.on('activate', () => {
   // On macOS it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    if (hearthGemApp) {
+      if (hearthGemApp) {
       hearthGemApp.start().catch((error) => {
         log.error(`Error restarting HearthGem app: ${error}`);
       });

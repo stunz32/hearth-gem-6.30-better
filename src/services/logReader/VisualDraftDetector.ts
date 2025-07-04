@@ -57,7 +57,7 @@ export class VisualDraftDetector extends EventEmitter {
   private consecutiveFailures: number = 0;
   private readonly DETECTION_INTERVAL_MS = 1000; // Check every second when active
   private readonly MIN_CONFIDENCE_THRESHOLD = 0.65; // Slightly lower threshold for more matches
-  private readonly MIN_CARDS_DETECTED = 2; // Minimum number of cards to consider a valid detection
+  private readonly MIN_CARDS_DETECTED = 1; // Require at least 1 confident card to succeed
   private readonly MAX_CONSECUTIVE_FAILURES = 5; // Maximum consecutive failures before adjusting
   private useImageMatching: boolean = true; // Whether to use image matching
   
@@ -279,14 +279,8 @@ export class VisualDraftDetector extends EventEmitter {
       
       // Check if we have enough valid matches from all methods combined
       if (allDetectionResults.length < this.MIN_CARDS_DETECTED) {
+        logger.debug('Detection failed – only '+allDetectionResults.length+' matches (threshold '+this.MIN_CARDS_DETECTED+")");
         this.handleDetectionFailure('Not enough confident card matches detected');
-        
-        logger.debug('Not enough confident card matches detected', { 
-          validMatchCount: allDetectionResults.length,
-          threshold: this.MIN_CARDS_DETECTED,
-          confidenceThreshold
-        });
-        
         return {
           cards: [],
           timestamp: Date.now(),

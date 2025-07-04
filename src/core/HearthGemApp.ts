@@ -123,6 +123,14 @@ export class HearthGemApp {
         this.overlayWindow.webContents.openDevTools({ mode: 'detach' });
       }
       
+      // Start visual detector so manual card detection requests succeed
+      try {
+        await this.visualDetector.start(allCards, this.cardDataService);
+        this.log.info('Visual detector started and active');
+      } catch (err) {
+        this.log.error('Failed to start visual detector at app startup', { error: err });
+      }
+      
       // Get some sample cards to display
       const sampleCards = await this.cardDataService.getSampleCards(3);
       if (sampleCards.length > 0) {
@@ -221,6 +229,67 @@ export class HearthGemApp {
     this.draftDetector.on('logFileActivity', (data) => {
       this.log.info('Log file activity detected', { file: data.file });
       this.updateLogStatus('📖 Reading logs...', 'active');
+    });
+    
+    // Add IPC handlers for startDetection and stopDetection
+    ipcMain.handle('startDetection', async (_, intervalMs: number) => {
+      this.log.info('startDetection IPC invoked', { intervalMs });
+      try {
+        if (this.visualDetector) {
+          // Start continuous detection with the current draft state
+          await this.visualDetector.startContinuousDetection(this.draftDetector.getState());
+          return true;
+        } else {
+          this.log.warn('startDetection called but visualDetector is not initialized');
+          return false;
+        }
+      } catch (error) {
+        this.log.error('Error in startDetection handler', { error });
+        throw error;
+      }
+    });
+    
+    ipcMain.handle('stopDetection', async () => {
+      this.log.info('stopDetection IPC invoked');
+      try {
+        if (this.visualDetector) {
+          this.visualDetector.stopContinuousDetection();
+          return true;
+        } else {
+          this.log.warn('stopDetection called but visualDetector is not initialized');
+          return false;
+        }
+      } catch (error) {
+        this.log.error('Error in stopDetection handler', { error });
+        throw error;
+      }
+    });
+    
+    // Handle one-shot card detection request from renderer
+    try {
+      ipcMain.removeHandler('detectCards');
+    } catch (_) {/* ignore */}
+
+    ipcMain.handle('detectCards', async () => {
+      this.log.info('detectCards IPC invoked');
+      try {
+        if (!this.visualDetector) {
+          this.log.warn('detectCards called but visualDetector is not initialised');
+          return { success: false, error: 'visual detector not initialised' };
+        }
+
+        const result = await this.visualDetector.detectCards();
+        this.log.info('detectCards result', { success: result.success, cardCount: result.cards?.length ?? 0 });
+
+        // re-emit to any overlays/listeners
+        if (result.success) {
+          this.overlayManager.sendToRenderer('cardsDetected', result);
+        }
+        return result;
+      } catch (error) {
+        this.log.error('Error in detectCards handler', { error });
+        throw error;
+      }
     });
     
     // Handle draft state changes

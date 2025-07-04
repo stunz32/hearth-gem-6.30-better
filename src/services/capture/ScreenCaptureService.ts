@@ -607,10 +607,9 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       
       logger.debug('Image preprocessed successfully');
       return processedDataUrl;
-    } catch (error) {
-      logger.error('Error preprocessing image', { error });
-      // Return original image if processing fails
-      return dataUrl;
+    } catch (error:any) {
+      logger.error('Error preprocessing image', { message: error?.message, stack: error?.stack });
+      throw error;
     }
   }
   
@@ -818,9 +817,17 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
           logger.info(`Capture result - success: ${result.success}, hasDataUrl: ${!!result.dataUrl}, dataUrlLength: ${result.dataUrl ? result.dataUrl.length : 0}`);
           
           if (result.success && result.dataUrl) {
-            // Apply image preprocessing
-            result.dataUrl = await this.preprocessImage(result.dataUrl, preprocessingOptions);
-            logger.info(`After preprocessing - dataUrlLength: ${result.dataUrl ? result.dataUrl.length : 0}`);
+            // Apply image preprocessing. This step can fail in headless/main-process
+            // environments where browser DOM APIs (e.g. Image) are not available.
+            // If preprocessing fails, we fall back to the original captured image so
+            // that the UI still has something to render instead of showing the
+            // "No images were successfully processed" warning.
+            try {
+              result.dataUrl = await this.preprocessImage(result.dataUrl, preprocessingOptions);
+              logger.info(`After preprocessing - dataUrlLength: ${result.dataUrl ? result.dataUrl.length : 0}`);
+            } catch (prepErr) {
+              logger.warn('Image preprocessing failed – using original capture', { error: prepErr });
+            }
           }
           
           // Explicitly construct a proper CaptureResult

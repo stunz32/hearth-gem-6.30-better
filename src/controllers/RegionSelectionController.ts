@@ -80,8 +80,11 @@ export default class RegionSelectionController {
       });
       
       return { regions: result.regions, cancelled: false };
-    } catch (error) {
-      logger.error('Error during manual region selection', { error });
+    } catch (error: any) {
+      logger.error('Error during manual region selection', {
+        message: error?.message ?? 'unknown',
+        stack: error?.stack ?? 'no-stack',
+      });
       return { regions: [], cancelled: true };
     } finally {
       // Clean up

@@ -1,0 +1,354 @@
+---
+alwaysApply: false
+---
+
+````
+──────────────────────────────────────────────────────────────────────────────
+                            CURSOR IDE RULE FILE
+                     ✦  MASTERING WINSTON LOGGING v3 ✦
+──────────────────────────────────────────────────────────────────────────────
+
+
+CONTENTS
+➊ Core Principles & Vocabulary
+➋ Installation Matrix
+➌ Logger Anatomy (Blueprint)
+➍ Levels Reference & Colorization
+➎ Formats Pipeline (with Cook-book)
+➏ Transports Catalog & Options
+➐ Advanced Features
+    • Exceptions + Rejections
+    • Child / Scoped Loggers
+    • Profiling / Timers
+    • Querying & Streaming
+➑ Patterns & Recipes (Drop-ins)
+➒ Custom Transports (Boilerplate)
+➓ Best-Practices, Anti-Patterns, FAQ
+⓫ Troubleshooting Checklist
+⓬ Appendix (Cheat-Sheet & Links)
+
+──────────────────────────────────────────────────────────────────────────────
+➊  CORE PRINCIPLES & VOCABULARY
+──────────────────────────────────────────────────────────────────────────────
+• Logger ——— an object created via `winston.createLogger(opts)`.
+• Transport —— a storage/output target (Console, File, HTTP, Stream, …).
+• Format ———  a pure function (or pipeline) that mutates an `info` object.
+• Info Object —— shape: `{ level, message, ...meta }` (+ Symbol fields).
+• Level ———  severity threshold (numeric ascending per RFC 5424).
+
+Rule 1 Every logger **MUST** have ≥ 1 transport OR risk silent memory leaks.
+Rule 2 Formats execute **in order**; returning `false` short-circuits the rest.
+Rule 3 `logger.*()` shortcut methods are generated from `levels` at instantiation.
+Rule 4 Treat `info` as immutable **only** if your format clones or uses Immer.
+Rule 5 NEVER leave `console.log` in production code once Winston is installed.
+
+──────────────────────────────────────────────────────────────────────────────
+➋  INSTALLATION MATRIX
+──────────────────────────────────────────────────────────────────────────────
+• Base  `npm i winston`  or `yarn add winston`
+• TS types No extra package; bundled in `index.d.ts`.
+• Cloud / rotation:
+    – Daily rotate      `npm i winston-daily-rotate-file`
+    – AWS CloudWatch    `npm i @initd.sg/winston-cloudwatch`
+    – Papertrail / Loggly etc. see community transports.
+Node Compatibility: v14 LTS ➜ v22. Set `"type":"module"` for ESM.
+
+──────────────────────────────────────────────────────────────────────────────
+➌  LOGGER ANATOMY  (“BLUEPRINT”)
+──────────────────────────────────────────────────────────────────────────────
+```ts
+import winston from 'winston';
+const { combine, timestamp, json, colorize, printf, splat } = winston.format;
+
+export const log = winston.createLogger({
+  level        : process.env.LOG_LEVEL ?? 'info',
+  defaultMeta  : { service: 'api-gateway' },
+  format       : combine(
+                   splat(),
+                   timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+                   process.env.NODE_ENV === 'production'
+                     ? json()
+                     : colorize({ all:true }),
+                   process.env.NODE_ENV === 'production'
+                     ? winston.format.uncolorize()
+                     : printf(({ timestamp, level, message, ...m }) =>
+                         `${timestamp} ${level} ${message}${
+                           Object.keys(m).length ? ' '+JSON.stringify(m) : ''}`)
+                 ),
+  transports   : [
+    new winston.transports.Console({ handleExceptions:true }),
+    new winston.transports.File({
+      filename : 'logs/error.log',
+      level    : 'error',
+      maxsize  :  5_000_000,      // rotate at 5 MB
+      maxFiles :  3
+    }),
+    ...(process.env.NODE_ENV === 'production' ? [] : [
+      new winston.transports.File({ filename:'logs/combined.log' })
+    ])
+  ],
+  exceptionHandlers : [ new winston.transports.File({ filename:'logs/exc.log' }) ],
+  rejectionHandlers : [ new winston.transports.File({ filename:'logs/rej.log' }) ],
+  exitOnError       : false
+});
+````
+
+Notes:
+• `combine()` returns a pre-instantiated format; no opts allowed.
+• Place `splat()` *before* anything that reads `%` interpolation.
+• Add/remove transports later with `logger.add()` / `.remove()` / `.clear()`.
+• Listener `log.on('finish', …)` fires when `.end()` flushes streams.
+
+──────────────────────────────────────────────────────────────────────────────
+➍  LEVELS REFERENCE & COLORIZATION
+──────────────────────────────────────────────────────────────────────────────
+Default **npm** map (↑ critical → ↓ verbose):
+
+| Name    | Priority | Shortcut | Color   |
+| ------- | -------- | -------- | ------- |
+| error   | 0        | .error   | red     |
+| warn    | 1        | .warn    | yellow  |
+| info    | 2        | .info    | green   |
+| http    | 3        | .http    | magenta |
+| verbose | 4        | .verbose | cyan    |
+| debug   | 5        | .debug   | blue    |
+| silly   | 6        | .silly   | gray    |
+
+Custom levels:
+
+```ts
+winston.addColors({ fatal:'bold red', trace:'dim gray' });
+const cust = winston.createLogger({
+  levels:{ fatal:0, error:1, warn:2, info:3, debug:4, trace:5 }
+});
+cust.fatal('🔥 system down');
+```
+
+Colorize **before** formatters that emit the colored text; use `{ all:true }`
+when coloring JSON or the entire line.
+
+──────────────────────────────────────────────────────────────────────────────
+➎  FORMATS PIPELINE  (“COOK-BOOK”)
+──────────────────────────────────────────────────────────────────────────────
+Available stock formatters (import via `winston.format.*`):
+• `json()`              —— pure JSON string output.
+• `simple()`            —— `${level}: ${message} ${…meta}` (no timestamp).
+• `prettyPrint()`       —— multi-line JSON, 2-space indent.
+• `timestamp()`         —— adds `info.timestamp`.
+• `label()`             —— attaches `info.label`.
+• `colorize()`          —— wraps ANSI colors around `level` (+ optionally msg).
+• `printf(fn)`          —— freeform template (return string).
+• `splat()`             —— util.format interpolation (`%d`, `%s`, etc.).
+• `ms()`                —— delta since prev log (`info.ms`).
+
+Pattern examples:
+
+1️⃣  Ignore private logs
+
+```ts
+const ignorePrivate = winston.format(info => info.private ? false : info);
+```
+
+2️⃣  Upper / lower case mutator
+
+```ts
+const volume = winston.format((i, { yell, whisper }) => {
+  if (yell) i.message = i.message.toUpperCase();
+  if (whisper) i.message = i.message.toLowerCase();
+  return i;
+});
+const scream = volume({ yell:true });
+```
+
+3️⃣  Request-ID enricher (Express middleware)
+
+```ts
+app.use((req, _, next) => {
+  req.log = log.child({ reqId: req.headers['x-request-id'] ?? nanoid() });
+  next();
+});
+```
+
+──────────────────────────────────────────────────────────────────────────────
+➏  TRANSPORTS CATALOG & OPTIONS
+──────────────────────────────────────────────────────────────────────────────
+╭──────────────────────────────┬─────────────────────────────────────────────╮
+│ Transport (core)             │ Key Options (superset)                     │
+├──────────────────────────────┼─────────────────────────────────────────────┤
+│ Console                      │ level, format, handleExceptions,           │
+│                              │ handleRejections, stderrLevels,            │
+│                              │ forceConsole (route to console.\*)          │
+│ File                         │ filename, dirname, maxsize, maxFiles,      │
+│                              │ tailable, zippedArchive                    │
+│ HTTP                         │ host, port, path, ssl, auth                │
+│ Stream                       │ stream\:Writable, eol, close                │
+╰──────────────────────────────┴─────────────────────────────────────────────╯
+
+Community highlights:
+• winston-daily-rotate-file —— date-based rotations (`YYYY-MM-DD` suffix).
+• Cloud / SaaS —— Winston transports exist for Datadog, Loggly, Sentry, etc.
+Multiple transports of same type are allowed; identify via custom `name` or
+by searching such as `logger.transports.find(t => t.filename==='errors.log')`.
+
+Remove example:
+
+```ts
+const errorsT = logger.transports.find(t => t.level==='error' && t.filename);
+logger.remove(errorsT);
+```
+
+──────────────────────────────────────────────────────────────────────────────
+➐  ADVANCED FEATURES
+──────────────────────────────────────────────────────────────────────────────
+A)  Exceptions & Rejections
+– Centralize with `exceptionHandlers` / `rejectionHandlers`
+– Toggle auto-exit via `exitOnError` (bool or `(err)=>bool`).
+
+B)  Child / Scoped Loggers
+
+```ts
+const scoped = logger.child({ tenant:'acme', correlationId:uuidv4() });
+scoped.info('action complete');
+```
+
+Children inherit transports + format; metadata is shallow-merged.
+
+C)  Profiling & Timers
+
+```ts
+logger.profile('db');          // start
+… await query();
+logger.profile('db');          // stop & auto-log duration (info)
+```
+
+Or manual timer:
+
+```ts
+const t = logger.startTimer();
+heavyTask().then(() => t.done({ level:'debug', message:'heavyTask ok' }));
+```
+
+D)  Query & Stream (rare)
+
+```ts
+logger.query({ limit:20, order:'desc' }, cb);
+logger.stream({ start:-1 }).on('log', l => …);
+```
+
+──────────────────────────────────────────────────────────────────────────────
+➑  PATTERNS & RECIPES
+──────────────────────────────────────────────────────────────────────────────
+
+1. **Prod vs Dev switcher** (file+JSON vs colorful console) —— see Blueprint.
+2. **Express HTTP Access Log**
+
+```ts
+import morgan from 'morgan';
+// Pipe morgan’s stream into Winston at 'http' level
+app.use(morgan('combined', {
+  stream: { write: msg => logger.http(msg.trim()) }
+}));
+```
+
+3. **Micro-service container**
+
+```ts
+winston.loggers.add('payment', { … });
+winston.loggers.add('email',   { … });
+winston.loggers.get('payment').error('charge failed');
+```
+
+4. **VS Code debug attach / Jest silent**
+
+```ts
+new winston.transports.Console({ forceConsole:true });
+```
+
+5. **Daily rotation (14-day retention)**
+
+```ts
+import 'winston-daily-rotate-file';
+logger.add(new winston.transports.DailyRotateFile({
+  filename   : 'logs/app-%DATE%.log',
+  datePattern: 'YYYY-MM-DD',
+  maxFiles   : '14d'
+}));
+```
+
+──────────────────────────────────────────────────────────────────────────────
+➒  CUSTOM TRANSPORT BOILERPLATE
+──────────────────────────────────────────────────────────────────────────────
+
+```ts
+import Transport from 'winston-transport';
+export class MyApiTransport extends Transport {
+  constructor(opts){ super(opts); /* store opts */ }
+  log(info, cb){
+    setImmediate(() => this.emit('logged', info));
+    fetch('https://log.myapi.dev', {
+      method : 'POST',
+      body   : JSON.stringify(info),
+      headers: { 'Content-Type':'application/json' }
+    }).catch(console.error);
+    cb();
+  }
+}
+logger.add(new MyApiTransport({ level:'debug' }));
+```
+
+──────────────────────────────────────────────────────────────────────────────
+➓  BEST-PRACTICES, ANTI-PATTERNS, FAQ
+──────────────────────────────────────────────────────────────────────────────
+✔ DO colocate `logger` import at file top; keep a **single** instance per app.
+✔ DO enrich logs with correlation/request IDs for distributed tracing.
+✔ DO externalize `LOG_LEVEL`, `LOG_TO_FILE`, rotation via ENV for 12-factor apps.
+✔ DO listen to `logger.on('error', …)` to avoid “Unhandled ‘error’ event”.
+
+✗ DON’T block in a custom transport; use `setImmediate` + async I/O.
+✗ DON’T mutate `info` after `this.emit('logged', info)` inside transports.
+✗ DON’T mix colorized logs with JSON consumers (ELK, CloudWatch) — use env toggle.
+✗ DON’T leave the default logger **without** transports (memory leak).
+
+FAQ
+Q: “Why are my debug logs missing?” —— Ensure `logger.level='debug'` AND each
+transport’s `level` ≥ 'debug'. Lowest common denominator wins.
+Q: “Logs missing in Lambda?” —— set `forceConsole:true` to bypass stdout/stderr
+redirection quirks.
+Q: “Exit after exception?” —— set `exitOnError:false`.
+
+──────────────────────────────────────────────────────────────────────────────
+⓫  TROUBLESHOOTING CHECKLIST
+──────────────────────────────────────────────────────────────────────────────
+□ Node version ≥ v14?                       `node -v`
+□ Multiple logger instances unintentionally? Grep for `createLogger(`
+□ Transport flushed? Listen for `'finish'` or call `await logger.end()`.
+□ Circular meta? Use `util.inspect` depth limiter or custom replacer.
+□ File permissions? Ensure path exists & write perms (`mkdir -p logs`).
+
+──────────────────────────────────────────────────────────────────────────────
+⓬  APPENDIX
+──────────────────────────────────────────────────────────────────────────────
+Cheat-Sheet
+• Quick log: `logger.info('msg', { meta })`
+• Flush & exit:
+`ts
+    logger.end();            // stop writing
+    await once(logger,'finish');
+    process.exit(0);
+    `
+• Color + JSON line:
+`winston.format.colorize({ all:true })`
+• Interpolation:
+`format: combine(splat(), simple())`
+
+Official Links
+• Docs & README [https://github.com/winstonjs/winston](https://github.com/winstonjs/winston)
+• Examples     [https://github.com/winstonjs/winston/tree/master/examples](https://github.com/winstonjs/winston/tree/master/examples)
+• Community transports curated under npm scope `winston-*`
+
+──────────────────────────────────────────────────────────────────────────────
+END OF RULE FILE — Happy Logging! 🚀
+──────────────────────────────────────────────────────────────────────────────
+
+```
+```

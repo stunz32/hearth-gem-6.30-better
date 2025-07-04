@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
 import * as chokidar from 'chokidar';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('services/logReader/LogWatcher');
 
 /**
  * LogWatcher

@@ -1,24 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
-import logger from './utils/logger';
+import { getLogger } from './utils/logger';
 import ScreenCaptureService from './services/capture/ScreenCaptureService';
 import ImageMatcherService from './services/vision/ImageMatcherService';
 import TemplateMatcherService from './services/vision/TemplateMatcherService';
 import VisualDraftDetector from './services/draft/VisualDraftDetector';
 import RegionDetector from './services/capture/RegionDetector';
 import { buildCardHashes } from './utils/build-card-hashes';
-import pino from 'pino';
 
-// Create a pino logger instance
-const log = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true
-    }
-  }
-});
+// Create logger instance for this module
+const logger = getLogger('HearthGemApp');
 
 /**
  * HearthGemApp
@@ -50,8 +41,7 @@ export class HearthGemApp {
     // Set up event listeners
     this.setupEventListeners();
     
-    logger.info('HearthGemApp initialized');
-    log.info('HearthGemApp initialized with safe capture service');
+    logger.info('HearthGemApp initialized with safe capture service');
   }
   
   /**
@@ -83,8 +73,7 @@ export class HearthGemApp {
       this.mainWindow = null;
     });
     
-    logger.info('Main window created');
-    log.info('Main window created with contextIsolation enabled');
+    logger.info('Main window created with contextIsolation enabled');
   }
   
   /**
@@ -228,8 +217,7 @@ export class HearthGemApp {
       const hearthstoneFound = await this.screenCaptureService.findHearthstoneWindow();
       
       if (hearthstoneFound) {
-        logger.info('Hearthstone window found, initializing services');
-        log.info('Hearthstone window found, initializing services with safe capture');
+        logger.info('Hearthstone window found, initializing services with safe capture');
         
         // Check if we have card hashes
         const hasHashes = await this.imageMatcherService.hasHashes();
@@ -244,15 +232,13 @@ export class HearthGemApp {
         }
         
         // Start visual draft detection with safe capture
-        log.info('Visual detection enabled with safe capture method');
+        logger.info('Visual detection enabled with safe capture method');
         this.visualDraftDetector.startDetection();
       } else {
         logger.warn('Hearthstone window not found, services will initialize when window is found');
-        log.warn('Hearthstone window not found, services will initialize when window is found');
       }
     } catch (error) {
       logger.error('Error initializing services', { error });
-      log.error({ error }, 'Error initializing services');
     }
   }
 }

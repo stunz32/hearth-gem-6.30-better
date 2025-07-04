@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/config/RegionConfigService');
 
 /**
  * Interface for card region configuration

@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/vision/ImageMatcherService');
 import sharp from 'sharp';
 import { promisify } from 'util';
 

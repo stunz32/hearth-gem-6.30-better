@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, screen } from 'electron';
-import logger from '../utils/logger';
+import path from 'path';
+import { getLogger } from '../utils/logger';
 import LogWatcher from '../services/logReader/LogWatcher';
 import ArenaDraftDetector, { DraftState, CardData } from '../services/logReader/ArenaDraftDetector';
 import CardDataService, { Card } from '../services/cardData/CardDataService';
@@ -11,6 +12,7 @@ import VisualDraftDetector from '../services/logReader/VisualDraftDetector';
 import { RegionSelector } from '../services/config/RegionSelector';
 import { ImageMatcher } from '../services/capture/ImageMatcher';
 import { TemplateMatcher } from '../services/capture/TemplateMatcher';
+import RegionSelectionController from '../controllers/RegionSelectionController';
 
 /**
  * HearthGemApp
@@ -34,17 +36,23 @@ export class HearthGemApp {
   private useVisualDetection: boolean = true; // Enable visual detection by default
   private useImageMatching: boolean = true; // Enable image matching by default
   private regionSelector: RegionSelector;
+  private regionSelectionController: RegionSelectionController | null = null;
   private overlayWindow: BrowserWindow | null = null;
+  
+  // Create a Winston logger instance for this module
+  private log = getLogger('core/HearthGemApp');
   
   /**
    * Creates a new HearthGemApp instance
    */
   constructor() {
-    logger.info('Starting HearthGem Arena Assistant');
+    this.log.info('Starting HearthGem Arena Assistant');
     
     // Initialize services
     this.logWatcher = new LogWatcher();
-    this.screenCapture = new ScreenCaptureService();
+    this.screenCapture = ScreenCaptureService.getInstance();
+    // Initialize screen capture (registers IPC handlers like captureRegions, detectCardRegions)
+    this.screenCapture.initialize();
     this.ocrService = new OCRService();
     this.cardMatcher = new CardMatcher();
     this.templateMatcher = new TemplateMatcher();
@@ -61,9 +69,15 @@ export class HearthGemApp {
     this.cardDataService = new CardDataService();
     this.overlayManager = new OverlayManager();
     this.regionSelector = new RegionSelector();
+    this.regionSelectionController = new RegionSelectionController();
     
     // Set up event handlers
     this.setupEventHandlers();
+    
+    // Register IPC handlers for manual region selection
+    if (this.regionSelectionController) {
+      this.regionSelectionController.registerIpc();
+    }
   }
   
   /**
@@ -71,12 +85,12 @@ export class HearthGemApp {
    * @returns Promise that resolves when startup is complete
    */
   public async start(): Promise<void> {
-    logger.info('Starting HearthGem Arena Assistant');
+    this.log.info('Starting HearthGem Arena Assistant');
     
     try {
       // Load card data first
       await this.cardDataService.loadCardData();
-      logger.info('Card data loaded successfully');
+      this.log.info('Card data loaded successfully');
       
       // Initialize card matcher with loaded cards
       const allCards = Array.from(this.cardDataService.getAllCards());
@@ -84,7 +98,7 @@ export class HearthGemApp {
       
       // Initialize image matcher with card data service
       this.imageMatcher = new ImageMatcher(this.cardDataService);
-      logger.info('Image matcher initialized');
+      this.log.info('Image matcher initialized');
       
       // Initialize visual detector with all services
       this.visualDetector = new VisualDraftDetector(
@@ -115,15 +129,15 @@ export class HearthGemApp {
       // Get some sample cards to display
       const sampleCards = await this.cardDataService.getSampleCards(3);
       if (sampleCards.length > 0) {
-        logger.info('Displaying sample cards:', { cards: sampleCards.map(c => c.name) });
-      this.overlayManager.displayCards(sampleCards);
+        this.log.info('Displaying sample cards:', { cards: sampleCards.map(c => c.name) });
+        this.overlayManager.displayCards(sampleCards);
       } else {
-        logger.warn('No sample cards available to display');
+        this.log.warn('No sample cards available to display');
       }
       
       // Start watching for log changes and visual detection
       await this.draftDetector.start();
-      logger.info('Draft detection started');
+      this.log.info('Draft detection started');
       
       // Show a welcome message
       this.updateLogStatus('📂 HearthGem Arena Assistant started', 'active');
@@ -133,7 +147,7 @@ export class HearthGemApp {
       this.updateDraftInfo(0, this.totalPicks);
       
     } catch (error) {
-      logger.error('Failed to start HearthGem', { error });
+      this.log.error('Failed to start HearthGem', { error });
       throw error;
     }
   }
@@ -142,7 +156,7 @@ export class HearthGemApp {
    * Stop the application
    */
   public async stop(): Promise<void> {
-    logger.info('Stopping HearthGem Arena Assistant');
+    this.log.info('Stopping HearthGem Arena Assistant');
     
     try {
       if (this.draftDetector) {
@@ -160,15 +174,19 @@ export class HearthGemApp {
       if (this.regionSelector) {
         this.regionSelector.dispose();
       }
+      
+      if (this.regionSelectionController) {
+        this.regionSelectionController.dispose();
+      }
 
       this.ocrService.destroy().catch(error => {
-        logger.error('Error destroying OCR service', { error });
+        this.log.error('Error destroying OCR service', { error });
       });
       this.overlayManager.destroy();
     
-      logger.info('HearthGem Arena Assistant stopped');
+      this.log.info('HearthGem Arena Assistant stopped');
     } catch (error) {
-      logger.error('Error stopping application', { error });
+      this.log.error('Error stopping application', { error });
     }
   }
   
@@ -181,7 +199,7 @@ export class HearthGemApp {
     confidenceThreshold?: number;
     preprocessingOptions?: Partial<import('../services/capture/ScreenCaptureService').PreprocessingOptions>;
   }): Promise<any> {
-    logger.info('Testing visual detection', { options });
+    this.log.info('Testing visual detection', { options });
     
     try {
       // Run test detection
@@ -192,7 +210,7 @@ export class HearthGemApp {
       
       return result;
     } catch (error) {
-      logger.error('Error testing visual detection', { error });
+      this.log.error('Error testing visual detection', { error });
       throw error;
     }
   }
@@ -200,19 +218,19 @@ export class HearthGemApp {
   private setupEventHandlers(): void {
     // Handle log directory found
     this.draftDetector.on('logDirectoryFound', (data) => {
-      logger.info('Log directory found', { directory: data.directory });
+      this.log.info('Log directory found', { directory: data.directory });
       this.updateLogStatus('📂 Log directory found!', 'active');
     });
     
     // Handle log file activity
     this.draftDetector.on('logFileActivity', (data) => {
-      logger.info('Log file activity detected', { file: data.file });
+      this.log.info('Log file activity detected', { file: data.file });
       this.updateLogStatus('📖 Reading logs...', 'active');
     });
     
     // Handle draft state changes
     this.draftDetector.on('stateChanged', (state: DraftState) => {
-      logger.info('Draft state changed', { state });
+      this.log.info('Draft state changed', { state });
       
       // Update draft status in UI
       switch (state) {
@@ -244,7 +262,7 @@ export class HearthGemApp {
     
     // Handle hero options
     this.draftDetector.on('heroOptions', (heroes: CardData[]) => {
-      logger.info('Hero options detected', { heroes });
+      this.log.info('Hero options detected', { heroes });
       this.updateLogStatus('📖 Hero options detected!', 'active');
       this.updateDraftStatus('🦸 Choose your hero!', 'active');
       
@@ -258,7 +276,7 @@ export class HearthGemApp {
     // Handle card options
     this.draftDetector.on('cardOptions', (pick) => {
       this.currentPickNumber = pick.pickNumber;
-      logger.info('Card options detected', { pickNumber: this.currentPickNumber });
+      this.log.info('Card options detected', { pickNumber: this.currentPickNumber });
       this.updateLogStatus('📖 Card options detected!', 'active');
       this.updateDraftStatus(`🃏 Pick ${this.currentPickNumber}/${this.totalPicks}`, 'active');
       this.updateDraftInfo(this.currentPickNumber, this.totalPicks);
@@ -272,7 +290,7 @@ export class HearthGemApp {
     
     // Handle hero selected
     this.draftDetector.on('heroSelected', (heroId: string) => {
-      logger.info('Hero selected', { heroId });
+      this.log.info('Hero selected', { heroId });
       this.updateLogStatus('📖 Hero selected!', 'active');
       
       // Get hero data
@@ -320,7 +338,7 @@ export class HearthGemApp {
     
     // Handle card picked
     this.draftDetector.on('cardPicked', (pick) => {
-      logger.info('Card picked', { pickNumber: pick.pickNumber, selectedCardId: pick.selected?.id });
+      this.log.info('Card picked', { pickNumber: pick.pickNumber, selectedCardId: pick.selected?.id });
       this.updateLogStatus('✅ Card picked!', 'active');
       this.updateDraftStatus(`✅ Picked card ${pick.pickNumber}/${this.totalPicks}`, 'active');
       this.updateDraftInfo(pick.pickNumber, this.totalPicks);
@@ -337,7 +355,7 @@ export class HearthGemApp {
     
     // Handle draft card detected
     this.draftDetector.on('draftCardDetected', (cardId: string) => {
-      logger.info('Card detected in draft deck', { cardId });
+      this.log.info('Card detected in draft deck', { cardId });
       
       // Skip if we've already seen this card
       if (this.detectedCards.has(cardId)) {
@@ -374,7 +392,7 @@ export class HearthGemApp {
     
     // Handle IPC messages from renderer
     ipcMain.on('toggle-overlay', () => {
-      logger.info('Toggle overlay requested');
+      this.log.info('Toggle overlay requested');
       // Always show the overlay instead of toggling
       this.overlayManager.show();
     });
@@ -383,7 +401,7 @@ export class HearthGemApp {
     ipcMain.on('toggle-visual-detection', (_, enabled) => {
       this.useVisualDetection = enabled;
       this.draftDetector.setVisualDetection(enabled);
-      logger.info('Visual detection toggled', { enabled });
+      this.log.info('Visual detection toggled', { enabled });
       this.updateLogStatus(`🔍 Visual detection ${enabled ? 'enabled' : 'disabled'}`, 'active');
     });
     
@@ -394,13 +412,13 @@ export class HearthGemApp {
         // Pass the setting to the test method
         this.visualDetector.testDetection({ useImageMatching: enabled });
       }
-      logger.info('Image matching toggled', { enabled });
+      this.log.info('Image matching toggled', { enabled });
       this.updateLogStatus(`🖼️ Image matching ${enabled ? 'enabled' : 'disabled'}`, 'active');
     });
     
     // Handle test visual detection
     ipcMain.on('test-visual-detection', async (_, options) => {
-      logger.info('Testing visual detection', { options });
+      this.log.info('Testing visual detection', { options });
       this.updateLogStatus('🔍 Testing visual detection...', 'active');
       
       try {
@@ -440,7 +458,7 @@ export class HearthGemApp {
           });
       }
       } catch (error) {
-        logger.error('Error testing visual detection', { error });
+        this.log.error('Error testing visual detection', { error });
         this.updateLogStatus(`❌ Visual detection error: ${error}`, 'error');
     
         // Send error to renderer
@@ -456,7 +474,7 @@ export class HearthGemApp {
     // Global shortcut to make overlay more visible for debugging
     const { globalShortcut } = require('electron');
     globalShortcut.register('F12', () => {
-      logger.info('F12 pressed - Making overlay more visible');
+      this.log.info('F12 pressed - Making overlay more visible');
       this.overlayManager.show();
       // Move to center of screen for better visibility
       this.overlayManager.updatePosition({ x: 100, y: 100 });
@@ -464,7 +482,7 @@ export class HearthGemApp {
     
     // Handle test display cards message
     ipcMain.on('test-display-cards', () => {
-      logger.info('Received test-display-cards message');
+      this.log.info('Received test-display-cards message');
       // Get some sample cards from the card data service
       const sampleCards = this.cardDataService.getSampleCards(3);
       // Display these cards in the overlay
@@ -474,7 +492,7 @@ export class HearthGemApp {
     // Region configuration handlers
     ipcMain.handle('configure-regions', async () => {
       try {
-        logger.info('Starting region configuration');
+        this.log.info('Starting region configuration');
         
         // Minimize main overlay during region selection
         if (this.overlayWindow) {
@@ -495,14 +513,14 @@ export class HearthGemApp {
             });
           }
           
-          logger.info('Regions configured successfully', { regionCount: result.regions.length });
+          this.log.info('Regions configured successfully', { regionCount: result.regions.length });
           return { success: true, regionCount: result.regions.length };
         } else {
-          logger.info('Region configuration cancelled or incomplete');
+          this.log.info('Region configuration cancelled or incomplete');
           return { success: false, cancelled: result.cancelled };
         }
       } catch (error) {
-        logger.error('Error configuring regions', { error });
+        this.log.error('Error configuring regions', { error });
         return { success: false, error: String(error) };
       } finally {
         // Restore main overlay
@@ -524,7 +542,7 @@ export class HearthGemApp {
           screenSize: primaryDisplay.size
         };
       } catch (error) {
-        logger.error('Error checking region configuration', { error });
+        this.log.error('Error checking region configuration', { error });
         return { configured: false };
       }
     });
@@ -538,10 +556,10 @@ export class HearthGemApp {
           this.overlayWindow.webContents.send('regions-cleared');
         }
         
-        logger.info('Manual regions cleared');
+        this.log.info('Manual regions cleared');
         return { success: true };
       } catch (error) {
-        logger.error('Error clearing regions', { error });
+        this.log.error('Error clearing regions', { error });
         return { success: false, error: String(error) };
       }
     });
@@ -549,7 +567,7 @@ export class HearthGemApp {
     // Test region detection
     ipcMain.handle('test-region-detection', async () => {
       try {
-        logger.info('Testing region detection');
+        this.log.info('Testing region detection');
         
         // Trigger a visual detection test
         if (this.visualDetector) {
@@ -564,7 +582,7 @@ export class HearthGemApp {
           return { success: false, error: 'Visual detector not available' };
         }
       } catch (error) {
-        logger.error('Error testing region detection', { error });
+        this.log.error('Error testing region detection', { error });
         return { success: false, error: String(error) };
       }
     });

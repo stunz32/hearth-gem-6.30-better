@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('services/cardData/CardDataService');
 
 /**
  * Interface for card data

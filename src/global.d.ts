@@ -16,6 +16,9 @@ declare global {
       addRarityTemplate: (imageData: string, cardId: string) => Promise<boolean>;
       detectCardRegions: () => Promise<any>;
       
+      // Generic IPC invoke method for additional handlers
+      invoke: (channel: string, ...args: any[]) => Promise<any>;
+      
       // Event listeners
       onCardsDetected: (callback: (result: any) => void) => void;
       

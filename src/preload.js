@@ -1,6 +1,7 @@
 // Ensure CommonJS globals exist in sandboxed renderer (needed because we compile renderer.js with CommonJS but NodeIntegration is disabled)
 // This prevents errors like 'exports is not defined' when the renderer bundle references CommonJS globals.
 globalThis.exports = globalThis.exports || {};
+window.require = require;
 
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -20,6 +21,9 @@ contextBridge.exposeInMainWorld(
     addManaTemplate: (imageData, cardId) => ipcRenderer.invoke('addManaTemplate', imageData, cardId),
     addRarityTemplate: (imageData, cardId) => ipcRenderer.invoke('addRarityTemplate', imageData, cardId),
     detectCardRegions: () => ipcRenderer.invoke('detectCardRegions'),
+    
+    // Generic IPC invoke method for additional handlers
+    invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
     
     // Event listeners
     onCardsDetected: (callback) => {

@@ -1,5 +1,8 @@
 import { createWorker, PSM, OEM } from 'tesseract.js';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/ocr/OCRService');
 import { EventEmitter } from 'events';
 import { CaptureResult } from '../capture/ScreenCaptureService';
 

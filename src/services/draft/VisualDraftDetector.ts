@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/draft/VisualDraftDetector');
 import ScreenCaptureService, { CaptureRegion, CaptureResult } from '../capture/ScreenCaptureService';
 import ImageMatcherService from '../vision/ImageMatcherService';
 import TemplateMatcherService from '../vision/TemplateMatcherService';

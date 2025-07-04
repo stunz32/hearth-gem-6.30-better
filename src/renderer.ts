@@ -1,5 +1,9 @@
 // Import types
 import type { DraftDetectionResult } from './services/draft/VisualDraftDetector';
+import { getLogger } from './utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('renderer');
 
 // DOM elements
 let findHearthstoneBtn: HTMLButtonElement;
@@ -9,6 +13,7 @@ let startDetectionBtn: HTMLButtonElement;
 let stopDetectionBtn: HTMLButtonElement;
 let generateHashesBtn: HTMLButtonElement;
 let detectRegionsBtn: HTMLButtonElement;
+let manualRegionSelectorBtn: HTMLButtonElement;
 let statusText: HTMLElement;
 let cardContainer: HTMLElement;
 let captureContainer: HTMLElement;
@@ -23,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   stopDetectionBtn = document.getElementById('stopDetectionBtn') as HTMLButtonElement;
   generateHashesBtn = document.getElementById('generateHashesBtn') as HTMLButtonElement;
   detectRegionsBtn = document.getElementById('detectRegionsBtn') as HTMLButtonElement;
+  manualRegionSelectorBtn = document.getElementById('manualRegionSelectorBtn') as HTMLButtonElement;
   statusText = document.getElementById('status') as HTMLElement;
   cardContainer = document.getElementById('cardContainer') as HTMLElement;
   captureContainer = document.getElementById('captureContainer') as HTMLElement;
@@ -40,6 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
   generateHashesBtn.addEventListener('click', generateHashes);
   detectRegionsBtn.addEventListener('click', detectCardRegions);
   
+  // Add manual region selector button listener
+  if (manualRegionSelectorBtn) {
+    manualRegionSelectorBtn.addEventListener('click', openManualRegionSelector);
+  }
+  
   // Set up manual region configuration handlers
   if (saveRegionsBtn) {
     saveRegionsBtn.addEventListener('click', saveManualRegions);
@@ -54,12 +65,50 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Update status
   updateStatus('Ready');
+  
+  // Check if manual regions exist and update UI accordingly
+  checkManualRegionsExist();
 });
 
 // Clean up event listeners when window is closed
 window.addEventListener('beforeunload', () => {
   window.api.removeAllListeners();
 });
+
+// Check if manual regions exist
+async function checkManualRegionsExist() {
+  try {
+    const { hasRegions } = await window.api.invoke('check-manual-regions');
+    
+    // Update UI based on whether manual regions exist
+    if (hasRegions) {
+      updateStatus('Manual regions configured');
+    }
+  } catch (error) {
+    logger.error('Error checking manual regions:', error);
+  }
+}
+
+// Open manual region selector
+async function openManualRegionSelector() {
+  try {
+    updateStatus('Opening manual region selector...');
+    
+    const result = await window.api.invoke('open-region-selector');
+    
+    if (result && !result.cancelled) {
+      updateStatus('Manual regions configured successfully');
+      
+      // Refresh the UI
+      await checkManualRegionsExist();
+    } else {
+      updateStatus('Manual region selection cancelled');
+    }
+  } catch (error) {
+    logger.error('Error opening region selector:', error);
+    updateStatus('Error opening region selector');
+  }
+}
 
 // Find Hearthstone window
 async function findHearthstoneWindow() {
@@ -85,7 +134,7 @@ async function captureRegions() {
     updateStatus('Capturing...');
     const images = await window.api.captureRegions();
     
-    console.log('Capture results:', images);
+    logger.debug('Capture results:', images);
     
     if (!images || images.length === 0) {
       captureContainer.innerHTML = '<div class="empty">No regions captured – configure regions first.</div>';
@@ -116,7 +165,7 @@ async function captureRegions() {
     displayCapturedImages(images);
     updateStatus(`Captured ${images.length} regions`);
   } catch (error) {
-    console.error('Failed to capture regions:', error);
+    logger.error('Failed to capture regions:', error);
     updateStatus('Failed to capture regions');
     captureContainer.innerHTML = '<div class="error">Failed to capture regions. Check the console for details.</div>';
   }
@@ -255,13 +304,12 @@ async function saveManualRegions() {
     const success = await window.api.saveManualRegions(regions);
     
     if (success) {
-      updateStatus('Manual regions saved successfully');
+      updateStatus('Manual regions saved');
     } else {
       updateStatus('Failed to save manual regions');
     }
   } catch (error) {
-    console.error('Error saving manual regions:', error);
-    updateStatus('Error saving manual regions');
+    updateStatus(`Error saving manual regions: ${error}`);
   }
 }
 
@@ -295,7 +343,7 @@ async function clearManualRegions() {
       updateStatus('Failed to clear manual regions');
     }
   } catch (error) {
-    console.error('Error clearing manual regions:', error);
+    logger.error('Error clearing manual regions:', error);
     updateStatus('Error clearing manual regions');
   }
 }
@@ -353,7 +401,7 @@ function displayCapturedImages(results: any[]) {
   
   // Create image elements
   for (const result of results) {
-    console.log('Processing result:', {
+    logger.debug('Processing result:', {
       success: result.success,
       hasDataUrl: !!result.dataUrl,
       dataUrlStart: result.dataUrl ? result.dataUrl.substring(0, 50) + '...' : 'none'
@@ -389,7 +437,7 @@ function displayCapturedImages(results: any[]) {
       img.style.width = '100%';
       img.style.marginBottom = '10px';
       img.onerror = () => {
-        console.error('Error loading image:', dataUrl.substring(0, 50) + '...');
+        logger.error('Error loading image:', dataUrl.substring(0, 50) + '...');
         img.style.display = 'none';
         const errorMsg = document.createElement('div');
         errorMsg.textContent = 'Error loading image';
@@ -434,7 +482,7 @@ function displayCapturedImages(results: any[]) {
 // Update status text
 function updateStatus(message: string) {
   statusText.textContent = message;
-  console.log(message);
+  logger.info(message);
 }
 
 /**
@@ -442,7 +490,7 @@ function updateStatus(message: string) {
  */
 async function testSafeCapture(): Promise<void> {
   try {
-    console.log('Testing safe capture method...');
+    logger.info('Testing safe capture method...');
     
     // Capture a small region of the screen
     const result = await window.desktop.captureRegion({
@@ -452,7 +500,7 @@ async function testSafeCapture(): Promise<void> {
       height: 180
     });
     
-    console.log('Capture successful, bytes:', result.length);
+    logger.info('Capture successful, bytes:', result.length);
     
     // Create a blob URL from the PNG buffer
     const blob = new Blob([result], { type: 'image/png' });
@@ -468,12 +516,12 @@ async function testSafeCapture(): Promise<void> {
     const testContainer = document.getElementById('test-container');
     if (testContainer) {
       testContainer.appendChild(img);
-      console.log('Test image added to container');
+      logger.info('Test image added to container');
     } else {
-      console.log('Test container not found, image URL:', url);
+      logger.info('Test container not found, image URL:', url);
     }
   } catch (error) {
-    console.error('Error testing safe capture:', error);
+    logger.error('Error testing safe capture:', error);
   }
 }
 

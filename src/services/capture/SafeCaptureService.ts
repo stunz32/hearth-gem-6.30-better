@@ -32,8 +32,9 @@ export class SafeCaptureService implements IScreenCaptureService {
   }
 
   constructor() {
-    this.registerIpcHandlers();
-    log.info('Safe capture service initialized');
+    // IPC handlers disabled - using ScreenCaptureService instead
+    // this.registerIpcHandlers();
+    log.info('Safe capture service initialized (IPC handlers disabled)');
   }
 
   /**

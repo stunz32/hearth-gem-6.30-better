@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/logReader/VisualDraftDetector');
 import { ScreenCaptureService } from '../capture/ScreenCaptureService';
 import { OCRService } from '../ocr/OCRService';
 import { CardMatcher } from '../cardData/CardMatcher';

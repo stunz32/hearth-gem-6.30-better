@@ -1,6 +1,9 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'path';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('services/overlay/OverlayManager');
 import { Card } from '../cardData/CardDataService';
 
 /**
@@ -59,12 +62,13 @@ export class OverlayManager {
         alwaysOnTop: true,
         skipTaskbar: false,
         webPreferences: {
-          nodeIntegration: true,
-          contextIsolation: false
+          nodeIntegration: false,
+          contextIsolation: true,
+          preload: path.join(__dirname, '../../../src/preload.js')
         }
       });
       
-    const indexPath = path.join(__dirname, '../../index.html');
+    const indexPath = path.join(process.cwd(), 'index.html');
     this.overlayWindow.loadFile(indexPath);
     
     // Ensure the window is visible

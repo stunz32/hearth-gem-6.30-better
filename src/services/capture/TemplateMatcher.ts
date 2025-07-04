@@ -2,7 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
 import { EventEmitter } from 'events';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/capture/TemplateMatcher');
 import { CaptureResult } from './ScreenCaptureService';
 
 // Use require instead of import to avoid TypeScript errors

@@ -19,9 +19,10 @@ const log = pino({
  * Sets up IPC handlers for screen capture
  */
 export function initializeCaptureHandler(): void {
-  log.info('Initializing capture handler');
+  log.info('Capture handler disabled - using ScreenCaptureService instead');
   
-  // Register the IPC handler for screen capture
+  // IPC handler registration disabled - using ScreenCaptureService instead
+  /*
   ipcMain.handle('CAPTURE_REGION', async (_, args: ICaptureRegionArgs) => {
     try {
       const { x, y, width, height } = args;
@@ -72,8 +73,9 @@ export function initializeCaptureHandler(): void {
       throw error;
     }
   });
+  */
   
-  log.info('Capture handler initialized');
+  log.info('Capture handler initialization complete (disabled)');
 }
 
 export default initializeCaptureHandler; 

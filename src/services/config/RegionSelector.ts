@@ -1,5 +1,8 @@
 import { BrowserWindow, screen, ipcMain } from 'electron';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/config/RegionSelector');
 import { CardRegion } from './RegionConfigService';
 
 export interface RegionSelectionResult {

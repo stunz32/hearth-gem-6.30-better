@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { promisify } from 'util';
-import logger from './logger';
+import { getLogger } from './logger';
+
+// Create logger instance for this module
+const logger = getLogger('utils/build-card-hashes');
 
 // Use require instead of import to avoid TypeScript errors
 const axios = require('axios');

@@ -1,5 +1,8 @@
 import { desktopCapturer, screen, Rectangle } from 'electron';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/capture/RegionDetector');
 import { EventEmitter } from 'events';
 import sharp from 'sharp';
 import path from 'path';

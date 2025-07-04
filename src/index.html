@@ -117,6 +117,114 @@
             color: white;
         }
         
+        /* Controls */
+        .controls {
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background-color: #8E44AD;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #9B59B6;
+        }
+        
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        
+        /* Manual Region Configuration */
+        .manual-region-config {
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border-top: 1px solid #444;
+            border-bottom: 1px solid #444;
+            padding: 20px 0;
+        }
+        
+        .manual-region-config h2 {
+            color: #CF9C38;
+            margin-top: 0;
+        }
+        
+        .manual-region-config p {
+            color: #AAA;
+            margin-bottom: 20px;
+        }
+        
+        .card-regions {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .card-region {
+            background: rgba(50, 50, 50, 0.8);
+            border-radius: 5px;
+            padding: 15px;
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .card-region h3 {
+            color: #CF9C38;
+            margin-top: 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        
+        .input-group {
+            margin-bottom: 10px;
+        }
+        
+        .input-group label {
+            display: inline-block;
+            width: 80px;
+            color: #CCC;
+        }
+        
+        .input-group input {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 5px;
+            width: 100px;
+            border-radius: 3px;
+        }
+        
+        .region-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .save-btn {
+            background-color: #27AE60;
+        }
+        
+        .save-btn:hover {
+            background-color: #2ECC71;
+        }
+        
+        .clear-btn {
+            background-color: #C0392B;
+        }
+        
+        .clear-btn:hover {
+            background-color: #E74C3C;
+        }
+        
         /* Card Display */
         .card-container {
             display: flex;
@@ -267,366 +375,16 @@
             border: 2px solid #B71C1C;
         }
 
-        /* Info Panels */
-        .info-panel {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid #444;
-            border-radius: 5px;
-            padding: 12px;
-            margin-top: 15px;
-        }
-
-        .info-panel h3 {
-            margin-top: 0;
-            color: #FFD700;
-            font-size: 16px;
-            border-bottom: 1px solid #444;
-            padding-bottom: 5px;
-            margin-bottom: 10px;
-        }
-
-        /* Hero Info */
-        .hero-name {
-            font-size: 18px;
-            color: #FFD700;
-            margin-bottom: 10px;
-        }
-
-        .hero-image {
-            width: 80px;
-            height: auto;
-            border-radius: 50%;
-            border: 2px solid #CF9C38;
-        }
-
-        /* Draft Info */
-        .draft-progress {
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-
-        .progress-bar-container {
-            height: 10px;
-            background-color: #444;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-
-        .progress-bar-fill {
-            height: 100%;
-            background-color: #4CAF50;
-        }
-
         /* Detected Cards */
         .detected-cards {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .detected-cards-list {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .detected-card {
-            display: flex;
-            align-items: center;
-            padding: 5px;
-            border-radius: 3px;
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-        
-        /* Controls Panel */
-        .controls-panel {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid #444;
-            border-radius: 5px;
-            padding: 12px;
-            margin-top: 15px;
-        }
-        
-        .controls-panel h3 {
-            margin-top: 0;
-            color: #FFD700;
-            font-size: 16px;
-            border-bottom: 1px solid #444;
-            padding-bottom: 5px;
-            margin-bottom: 10px;
-        }
-        
-        .control-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            padding: 5px;
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-        }
-        
-        .control-button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 14px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-        }
-        
-        .control-button:hover {
-            background-color: #45a049;
-        }
-
-        .card-cost-badge {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background-color: #3f6ded;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            margin-right: 10px;
-            font-size: 12px;
-        }
-
-        .detected-card-name {
-            font-size: 14px;
-        }
-
-        /* Advanced Options */
-        .advanced-options-container {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid #444;
-            border-radius: 5px;
-            padding: 12px;
-            margin-top: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .option-container {
-            margin-bottom: 10px;
-        }
-        
-        .option-value {
-            display: inline-block;
-            width: 40px;
-            text-align: right;
-            margin-right: 10px;
-        }
-        
-        .preprocessing-options {
-            margin-top: 15px;
-        }
-        
-        .preprocessing-options h4 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #FFD700;
-        }
-        
-        .checkbox-option {
-            margin-bottom: 8px;
-        }
-        
-        .checkbox-option input {
-            margin-right: 8px;
-        }
-        
-        .control-button.secondary {
-            background-color: #555;
-            margin-left: 10px;
-        }
-        
-        /* Test Results */
-        .test-results-container {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(25, 25, 25, 0.95);
-            border: 2px solid #CF9C38;
-            border-radius: 10px;
-            padding: 20px;
-            width: 80%;
-            max-width: 800px;
-            max-height: 80vh;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-        }
-        
-        .test-results-container h3 {
-            color: #FFD700;
-            text-align: center;
-            margin-top: 0;
-            border-bottom: 1px solid #444;
-            padding-bottom: 10px;
-        }
-        
-        .close-button {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: none;
-            border: none;
-            color: #FFF;
-            font-size: 24px;
-            cursor: pointer;
-        }
-        
-        .test-status {
-            padding: 10px;
-            border-radius: 5px;
-            text-align: center;
-            margin-bottom: 15px;
-            font-weight: bold;
-        }
-        
-        .test-status.success {
-            background-color: #4CAF50;
-            color: white;
-        }
-        
-        .test-status.failure {
-            background-color: #F44336;
-            color: white;
-        }
-        
-        .test-info {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 8px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-        
-        .matches-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        
-        .matches-table th,
-        .matches-table td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #444;
-        }
-        
-        .matches-table th {
-            background-color: #333;
-            color: #FFD700;
-        }
-        
-        .matches-table .success-row {
-            background-color: rgba(76, 175, 80, 0.2);
-        }
-        
-        .matches-table .failure-row {
-            background-color: rgba(244, 67, 54, 0.2);
-        }
-
-        /* Controls Section */
-        .controls {
             margin-top: 20px;
-            padding: 15px;
-            border: 1px solid #444;
-            border-radius: 8px;
-            background: rgba(40, 40, 40, 0.8);
+            border-top: 1px solid #444;
+            padding-top: 20px;
         }
 
-        .controls h3 {
-            color: #FFD700;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #666;
-            padding-bottom: 5px;
-        }
-
-        .control-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .control-item label {
-            margin-right: 10px;
-            width: 150px;
-        }
-
-        .control-button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 5px;
-            transition: background-color 0.2s;
-        }
-
-        .control-button:hover {
-            background: #45a049;
-        }
-
-        .control-button.warning {
-            background: #ff9800;
-        }
-
-        .control-button.warning:hover {
-            background: #e68900;
-        }
-
-        .control-button.danger {
-            background: #f44336;
-        }
-
-        .control-button.danger:hover {
-            background: #da190b;
-        }
-
-        .region-controls {
-            margin-top: 15px;
-            padding: 15px;
-            border: 1px solid #666;
-            border-radius: 6px;
-            background: rgba(60, 60, 60, 0.5);
-        }
-
-        .region-controls h4 {
-            color: #FFD700;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-
-        .region-status {
-            margin: 10px 0;
-            padding: 8px 12px;
-            border-radius: 4px;
-            background: #333;
-            font-size: 14px;
-        }
-
-        .region-status.success {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .region-status.warning {
-            background: #FFC107;
-            color: black;
-        }
-
-        .region-status.error {
-            background: #F44336;
-            color: white;
+        .detected-cards h2 {
+            color: #CF9C38;
+            margin-top: 0;
         }
     </style>
 </head>
@@ -637,9 +395,93 @@
             HearthGem Arena Assistant
         </div>
         
-    <div class="status-bar">
+        <div class="status-bar">
             <div id="log-status" class="status-indicator">Waiting for logs...</div>
             <div id="draft-status" class="status-indicator">No draft detected</div>
+        </div>
+
+        <div class="controls">
+            <h2>Controls</h2>
+            <button id="findHearthstoneBtn">Find Hearthstone</button>
+            <button id="detectRegionsBtn">Auto-Detect Regions</button>
+            <button id="captureRegionsBtn">Capture Regions</button>
+            <button id="detectCardsBtn">Detect Cards Once</button>
+            <button id="startDetectionBtn">Start Auto Detection</button>
+            <button id="stopDetectionBtn" disabled>Stop Auto Detection</button>
+            <button id="generateHashesBtn">Generate Card Hashes</button>
+            <button id="manualRegionSelectorBtn">Draw Manual Regions</button>
+        </div>
+
+        <div class="manual-region-config">
+            <h2>Manual Region Configuration</h2>
+            <p>Set exact card positions when automatic detection isn't working:</p>
+            
+            <div class="card-regions">
+                <div class="card-region">
+                    <h3>Card 1 (Left)</h3>
+                    <div class="input-group">
+                        <label>X (%):</label>
+                        <input type="number" id="card1-x" value="12" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Y (%):</label>
+                        <input type="number" id="card1-y" value="40" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Width (%):</label>
+                        <input type="number" id="card1-width" value="22" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Height (%):</label>
+                        <input type="number" id="card1-height" value="40" min="0" max="100">
+                    </div>
+                </div>
+                
+                <div class="card-region">
+                    <h3>Card 2 (Middle)</h3>
+                    <div class="input-group">
+                        <label>X (%):</label>
+                        <input type="number" id="card2-x" value="41" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Y (%):</label>
+                        <input type="number" id="card2-y" value="40" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Width (%):</label>
+                        <input type="number" id="card2-width" value="22" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Height (%):</label>
+                        <input type="number" id="card2-height" value="40" min="0" max="100">
+                    </div>
+                </div>
+                
+                <div class="card-region">
+                    <h3>Card 3 (Right)</h3>
+                    <div class="input-group">
+                        <label>X (%):</label>
+                        <input type="number" id="card3-x" value="70" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Y (%):</label>
+                        <input type="number" id="card3-y" value="40" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Width (%):</label>
+                        <input type="number" id="card3-width" value="22" min="0" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label>Height (%):</label>
+                        <input type="number" id="card3-height" value="40" min="0" max="100">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="region-buttons">
+                <button id="saveRegionsBtn" class="save-btn">Save Manual Regions</button>
+                <button id="clearRegionsBtn" class="clear-btn">Clear Manual Regions</button>
+            </div>
         </div>
 
         <!-- Hero Info Section -->
@@ -652,34 +494,15 @@
         <div id="card-container" class="card-container"></div>
         
         <!-- Detected Cards Section -->
-        <div id="detected-cards" class="detected-cards"></div>
-        
-        <!-- Controls Section -->
-        <div id="controls" class="controls">
-            <h3>Controls</h3>
-            
-            <!-- Region Configuration -->
-            <div class="region-controls">
-                <h4>🎯 Card Region Configuration</h4>
-                <div id="region-status" class="region-status">Loading region status...</div>
-                
-                <div class="control-item">
-                    <button id="configure-regions-btn" class="control-button">
-                        📍 Configure Card Regions
-                    </button>
-                    <button id="test-regions-btn" class="control-button warning">
-                        🔍 Test Detection
-                    </button>
-                    <button id="clear-regions-btn" class="control-button danger">
-                        🧹 Clear Regions
-                    </button>
-                </div>
-                
-                <div style="margin-top: 10px; font-size: 12px; color: #999;">
-                    Configure regions to manually define where cards appear on your screen for better detection accuracy.
-                </div>
-            </div>
+        <div id="detected-cards" class="detected-cards">
+            <h2>Detected Cards</h2>
         </div>
+
+        <!-- Capture Container -->
+        <div id="captureContainer"></div>
+        
+        <!-- Status -->
+        <div id="status" style="margin-top: 20px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px;"></div>
     </div>
     
     <!-- Scroll buttons -->
@@ -688,8 +511,6 @@
         <button id="scroll-down" class="scroll-button" title="Scroll Down">▼</button>
     </div>
     
-    <script>
-        require('./renderer.js');
-    </script>
+    <script src="./renderer.js"></script>
 </body>
 </html>

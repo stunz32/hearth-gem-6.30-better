@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/logReader/ArenaDraftDetector');
 import LogWatcher from './LogWatcher';
 import VisualDraftDetector, { VisualDetectionResult } from './VisualDraftDetector';
 import { Card } from '../cardData/CardDataService';

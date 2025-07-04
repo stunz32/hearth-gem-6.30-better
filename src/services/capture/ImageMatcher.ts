@@ -3,7 +3,10 @@ import * as path from 'path';
 import * as sharp from 'sharp';
 import { promisify } from 'util';
 import { EventEmitter } from 'events';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/capture/ImageMatcher');
 import { CaptureRegion, CaptureResult } from './ScreenCaptureService';
 import { CardDataService } from '../cardData/CardDataService';
 

@@ -1,5 +1,8 @@
 import stringSimilarity from 'string-similarity';
-import logger from '../../utils/logger';
+import { getLogger } from '../../utils/logger';
+
+// Create logger instance for this module
+const logger = getLogger('src/services/cardData/CardMatcher');
 import { Card } from './CardDataService';
 import { OCRResult } from '../ocr/OCRService';
 

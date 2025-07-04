@@ -60,7 +60,11 @@ export class ImageMatcher extends EventEmitter {
   private cardHashes: CardHash[] = [];
   private cardDataService: CardDataService;
   private hashesLoaded: boolean = false;
-  private readonly HASH_MATCH_THRESHOLD = 0.85; // Minimum similarity for a hash match
+  // Minimum similarity for a hash match. 0.85 proved a bit too strict for
+  // the quality of screenshots we obtain from the screen-capture pipeline.
+  // Lowering slightly increases recall while still avoiding most false
+  // positives.  Tune further once we gather real-world stats via logging.
+  private readonly HASH_MATCH_THRESHOLD = 0.8;
   private readonly MANA_MATCH_THRESHOLD = 0.9; // Minimum similarity for a mana cost match
   private readonly RARITY_MATCH_THRESHOLD = 0.9; // Minimum similarity for a rarity gem match
   
@@ -78,15 +82,29 @@ export class ImageMatcher extends EventEmitter {
    */
   private async loadCardHashes(): Promise<void> {
     try {
-      const hashesPath = path.join(__dirname, '../../../data/hashes/card-hashes.json');
+      // Support both kebab-case (legacy) and snake_case (current) filenames so
+      // existing deployments continue to work regardless of naming scheme.
+      const legacyPath = path.join(__dirname, '../../../data/hashes/card-hashes.json');
+      const snakePath  = path.join(__dirname, '../../../data/hashes/card_hashes.json');
+      const cwdLegacy  = path.join(process.cwd(), 'data/hashes/card-hashes.json');
+      const cwdSnake   = path.join(process.cwd(), 'data/hashes/card_hashes.json');
+
+      const candidatePaths = [legacyPath, snakePath, cwdLegacy, cwdSnake];
+      const hashesPath = candidatePaths.find(p => fs.existsSync(p));
+      if (!hashesPath) {
+        logger.warn('Card hashes file not found in any candidate path', { candidatePaths });
+        this.hashesLoaded = false;
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const finalPath = hashesPath!;
       
-      // Check if hashes file exists
-      if (fs.existsSync(hashesPath)) {
-        this.cardHashes = JSON.parse(fs.readFileSync(hashesPath, 'utf8'));
+      if (fs.existsSync(finalPath)) {
+        this.cardHashes = JSON.parse(fs.readFileSync(finalPath, 'utf8'));
         this.hashesLoaded = true;
-        logger.info('Card hashes loaded successfully', { count: this.cardHashes.length });
+        logger.info('Card hashes loaded successfully', { count: this.cardHashes.length, path: finalPath });
       } else {
-        logger.warn('Card hashes file not found', { path: hashesPath });
+        logger.warn('Card hashes file not found (after exists check)', { path: finalPath });
         logger.info('Run "npm run build:hashes" to generate card hashes');
         this.hashesLoaded = false;
       }
@@ -176,7 +194,16 @@ export class ImageMatcher extends EventEmitter {
       }
       
       // If no good match, return no match
-      logger.debug('No hash match found', { bestSimilarity });
+      if (bestMatch) {
+        logger.info('Hash match below threshold', {
+          triedCard: bestMatch.name,
+          bestSimilarity,
+          threshold: this.HASH_MATCH_THRESHOLD,
+          region: captureResult.region.name
+        });
+      } else {
+        logger.debug('No hash match found – no card with any similarity', { region: captureResult.region.name });
+      }
       return noMatchResult;
     } catch (error) {
       logger.error('Error matching card image', { error });

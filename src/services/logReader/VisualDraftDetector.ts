@@ -203,10 +203,35 @@ export class VisualDraftDetector extends EventEmitter {
         
         const imageMatchResults = await Promise.all(imageMatchPromises);
         
-        // Filter successful matches
+        const hashThreshold = (this.imageMatcher as any).HASH_MATCH_THRESHOLD ?? 0.8;
+
         const successfulImageMatches = imageMatchResults.filter(
-          match => match.cardId !== null && match.confidence >= 0.85
+          match => match.cardId !== null && match.confidence >= hashThreshold
         );
+
+        // Log confidences for each image match attempt to diagnose why they may
+        // be falling below the HASH_MATCH_THRESHOLD.
+        const confidenceList = imageMatchResults.map((m) => ({
+          region: m.region?.name ?? 'unknown',
+          confidence: m.confidence.toFixed(3),
+          matchedId: m.cardId ?? 'none'
+        }));
+        logger.info('Image matching confidences', {
+          total: imageMatchResults.length,
+          successful: successfulImageMatches.length,
+          threshold: hashThreshold,
+          confidences: confidenceList
+        });
+        
+        // Log summary when no matches are above threshold so we can decide if
+        // the threshold is too strict.
+        if (successfulImageMatches.length === 0) {
+          const topCandidate = imageMatchResults.sort((a,b) => b.confidence - a.confidence)[0];
+          logger.info('No image matches above threshold', {
+            topConfidence: topCandidate?.confidence.toFixed(3),
+            threshold: hashThreshold
+          });
+        }
         
         // Add successful image matches to results
         for (const match of successfulImageMatches) {
@@ -219,11 +244,6 @@ export class VisualDraftDetector extends EventEmitter {
             });
           }
         }
-        
-        logger.debug('Image matching results', { 
-          total: imageMatchResults.length,
-          successful: successfulImageMatches.length 
-        });
         
         // If we have enough matches from image matching, skip OCR
         if (successfulImageMatches.length >= this.MIN_CARDS_DETECTED) {

@@ -160,6 +160,37 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       }
       
       logger.info('Manual regions updated', { regionCount: regions.length });
+
+      // Capture and persist high-quality reference images for each newly
+      // defined manual region.  These are saved **once** right after the user
+      // finishes the Configure-Cards workflow so that the hash matcher can be
+      // trained / debugged offline without storing every automatic capture.
+      try {
+        const captureResults = await this.captureCardNameRegions({
+          enhanceContrast: false,
+          sharpen: false,
+          binarize: false,
+          scaleUp: false
+        });
+        const outDir = path.join(process.cwd(), 'data', 'manual_captured');
+        if (!fs.existsSync(outDir)) {
+          fs.mkdirSync(outDir, { recursive: true });
+        }
+        await Promise.all(
+          captureResults.map(async (cap) => {
+            const pngBuffer = Buffer.from(cap.dataUrl.split(',')[1], 'base64');
+            const fileName = `${cap.region.name}_${Date.now()}.png`;
+            const filePath = path.join(outDir, fileName);
+            await fs.promises.writeFile(filePath, pngBuffer);
+            logger.info('Saved manual reference capture', { filePath });
+          })
+        );
+      } catch (capErr) {
+        logger.warn('Failed to capture & save manual region images', {
+          error: (capErr as any)?.message ?? 'unknown'
+        });
+      }
+
       return true;
     } catch (error) {
       logger.error('Error updating manual regions', { error });
@@ -460,9 +491,18 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       const { bounds, scaleFactor } = primaryDisplay;
       const { width: displayWidth, height: displayHeight } = bounds;
       
-      // Calculate safe thumbnail size (physical resolution ÷ DPI scale)
-      const thumbWidth = Math.round(displayWidth / scaleFactor);
-      const thumbHeight = Math.round(displayHeight / scaleFactor);
+      // Capture at the display's *native* resolution instead of a down-scaled
+      // thumbnail. Down-scaling was causing the cropped card images to be
+      // roughly ~180px wide, which significantly hurt OCR accuracy and
+      // template-matching confidence.  Modern GPUs can easily handle the
+      // full-resolution thumbnail buffer (≈ 3–8 MB), and we crop a small
+      // region immediately afterwards, so the memory overhead is minimal.
+      //
+      // NOTE: We still keep captureSafeRegion for crash-safe fallback when
+      // extremely high resolutions (> 8k) are in use, but for normal 1080p-4k
+      // screens this native capture path gives dramatically better results.
+      const thumbWidth = displayWidth;
+      const thumbHeight = displayHeight;
       
       logger.debug(`Requested screen capture - displayWidth: ${displayWidth}, displayHeight: ${displayHeight}, scaleFactor: ${scaleFactor}, thumbWidth: ${thumbWidth}, thumbHeight: ${thumbHeight}, captureArgs: ${JSON.stringify(args)}`);
 
@@ -529,6 +569,9 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       captureResult.region = args;
       captureResult.timestamp = Date.now();
       captureResult.success = true;
+
+      // (Debug capture to disk removed – we now capture only during manual
+      // Configure-Regions workflow to avoid cluttering the filesystem.)
 
       return captureResult as unknown as CaptureRegionResult;
     } catch (error) {
@@ -1127,9 +1170,18 @@ export class ScreenCaptureService extends EventEmitter implements IScreenCapture
       const { bounds, scaleFactor } = primaryDisplay;
       const { width: displayWidth, height: displayHeight } = bounds;
       
-      // Calculate safe thumbnail size (physical resolution ÷ DPI scale)
-      const thumbWidth = Math.round(displayWidth / scaleFactor);
-      const thumbHeight = Math.round(displayHeight / scaleFactor);
+      // Capture at the display's *native* resolution instead of a down-scaled
+      // thumbnail. Down-scaling was causing the cropped card images to be
+      // roughly ~180px wide, which significantly hurt OCR accuracy and
+      // template-matching confidence.  Modern GPUs can easily handle the
+      // full-resolution thumbnail buffer (≈ 3–8 MB), and we crop a small
+      // region immediately afterwards, so the memory overhead is minimal.
+      //
+      // NOTE: We still keep captureSafeRegion for crash-safe fallback when
+      // extremely high resolutions (> 8k) are in use, but for normal 1080p-4k
+      // screens this native capture path gives dramatically better results.
+      const thumbWidth = displayWidth;
+      const thumbHeight = displayHeight;
       
       logger.debug(`Requested screen capture - displayWidth: ${displayWidth}, displayHeight: ${displayHeight}, scaleFactor: ${scaleFactor}, thumbWidth: ${thumbWidth}, thumbHeight: ${thumbHeight}, captureArgs: x=${args.x}, y=${args.y}, width=${args.width}, height=${args.height}`);
 
